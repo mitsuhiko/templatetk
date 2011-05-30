@@ -1,0 +1,9 @@
+
+  // django-template-compilation (project: templatetk)
+
+  This is a Google Summer of Code project that attempts to implement
+  template compilation for Django.  It not only tries to do that for
+  Django but it tries to keep the compiler generic enough that it
+  works with arbitrary template engines including Jinja2 and possible
+  others.
+
