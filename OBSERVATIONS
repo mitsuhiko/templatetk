@@ -1,0 +1,36 @@
+Observations
+============
+
+This file tracks things that might not work out as easy as planned or are
+otherwise noteworthy.
+
+Differences in Sematics
+-----------------------
+
+The following differences in semantics might cause a problem:
+
+-   Jinja2 currently adheres to the `__html__` special method that is also
+    used by Mako and Genshi (and the markupsafe package) to figure out how
+    autoescaping is supposed to work.  Django does not do that, instead
+    it has its own special string type.  Also that string behaves
+    differently on concatenation than the markupsafe one.
+
+-   Jinja2 performs constant folding, Django probably does not respond too
+    well to that as blocks can change autoescaping behavior and similar
+    things at runtime.  This should not be too much of a problem as we can
+    just mark these blocks as volatile and the constant folding stops.
+
+-   Django includes pull in all locals into the same context.  That is
+    generally also what Jinja2 is aiming for, so for as long as imports
+    are not used in Django there should not be a problem.
+
+Possible Counters
+-----------------
+
+-   The template compiler could just use a general configuration object
+    that is passed around and controls these differences (what to use for
+    autoescaping)
+
+-   Django adopts the same semantics as the other environments for
+    escaping.  That would also give it the speedup of markupsafe for the
+    escaping operations.
