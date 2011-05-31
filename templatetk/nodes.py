@@ -13,12 +13,8 @@
 import operator
 from itertools import izip
 from collections import deque
-from types import MethodType, FunctionType
+
 from templatetk.utils import Markup
-
-
-#: the types we support for context functions
-_context_function_types = (FunctionType, MethodType)
 
 
 _binop_to_func = {
@@ -264,7 +260,7 @@ class For(Stmt):
 
     For filtered nodes an expression can be stored as `test`, otherwise `None`.
     """
-    fields = ('target', 'iter', 'body', 'else_', 'test', 'recursive')
+    fields = ('target', 'iter', 'body', 'else_', 'test')
 
 
 class If(Stmt):
@@ -272,19 +268,12 @@ class If(Stmt):
     fields = ('test', 'body', 'else_')
 
 
-class Macro(Stmt):
-    """A macro definition.  `name` is the name of the macro, `args` a list of
-    arguments and `defaults` a list of defaults if there are any.  `body` is
-    a list of nodes for the macro body.
+class Function(Stmt):
+    """Defines a function and stores it in the given target.
     """
-    fields = ('name', 'args', 'defaults', 'body')
-
-
-class CallBlock(Stmt):
-    """Like a macro without a name but a call instead.  `call` is called with
-    the unnamed macro as `caller` argument this node holds.
-    """
-    fields = ('call', 'args', 'defaults', 'body')
+    # TODO: can we define this as an expression with this new compiler?
+    # Would make things a lot easier for everything but compilation ...
+    fields = ('target', 'args', 'defaults', 'body')
 
 
 class FilterBlock(Stmt):
@@ -521,7 +510,6 @@ class Filter(Expr):
     """
     fields = ('node', 'name', 'args', 'kwargs', 'dyn_args', 'dyn_kwargs')
 
-    # XXX: what about filters at runtime?
     def as_const(self, eval_ctx):
         if eval_ctx.volatile or self.node is None:
             raise Impossible()
@@ -577,11 +565,10 @@ class Call(Expr):
 
         # don't evaluate context functions
         args = [x.as_const(eval_ctx) for x in self.args]
-        if isinstance(obj, _context_function_types):
-            if getattr(obj, 'contextfunction', False):
-                raise Impossible()
-            elif getattr(obj, 'evalcontextfunction', False):
-                args.insert(0, eval_ctx)
+        if eval_ctx.compiler_config.is_context_function(obj):
+            raise Impossible()
+        elif eval_ctx.compiler_config.is_eval_context_function(obj):
+            args.insert(0, eval_ctx)
 
         kwargs = dict(x.as_const(eval_ctx) for x in self.kwargs)
         if self.dyn_args is not None:

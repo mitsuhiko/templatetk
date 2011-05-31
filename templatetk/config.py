@@ -9,6 +9,11 @@
     :copyright: (c) Copyright 2011 by Armin Ronacher.
     :license: BSD, see LICENSE for more details.
 """
+from types import MethodType, FunctionType
+
+
+#: the types we support for context functions
+_context_function_types = (FunctionType, MethodType)
 
 
 class Undefined(object):
@@ -35,6 +40,17 @@ class CompilerConfig(object):
                 return object[attribute]
             except (TypeError, LookupError):
                 return Undefined()
+
+    def is_undefined(self, obj):
+        return isinstance(obj, Undefined)
+
+    def is_context_function(self, obj):
+        return isinstance(obj, _context_function_types) and \
+               getattr(obj, 'contextfunction', False)
+
+    def is_eval_context_function(self, obj):
+        return isinstance(obj, _context_function_types) and \
+               getattr(obj, 'evalcontextfunction', False)
 
     def getitem(self, object, attribute):
         return self.getattr(object, attribute)
