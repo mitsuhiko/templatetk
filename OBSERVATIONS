@@ -24,6 +24,17 @@ The following differences in semantics might cause a problem:
     generally also what Jinja2 is aiming for, so for as long as imports
     are not used in Django there should not be a problem.
 
+Django Performance Limitations
+------------------------------
+
+-   Django provides {{ forloop.parentloop }} which means that identifier
+    tracking to `forloop` won't work to speed up loops that don't need the
+    loop context.  The current loop context in the runtime discards that
+    information, the django backend will have to override
+    context.wrap_loop and attach that value to the context.  In fact the
+    django forloop thing would even have to emulate a dictionary interface
+    to say backwards compatible in that regard.
+
 Possible Counters
 -----------------
 

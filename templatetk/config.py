@@ -11,6 +11,8 @@
 """
 from types import MethodType, FunctionType
 
+from templatetk.runtime import LoopContext
+
 
 #: the types we support for context functions
 _context_function_types = (FunctionType, MethodType)
@@ -21,12 +23,14 @@ class Undefined(object):
     pass
 
 
-class CompilerConfig(object):
+class Config(object):
 
     def __init__(self):
         self.sandboxed = False
         self.intercepted_binops = frozenset()
         self.intercepted_unops = frozenset()
+        self.forloop_accessor = 'loop'
+        self.forloop_parent_access = False
 
     def get_autoescape_default(self, template_name):
         return False
@@ -44,6 +48,9 @@ class CompilerConfig(object):
     def is_undefined(self, obj):
         return isinstance(obj, Undefined)
 
+    def undefined_variable(self, name):
+        return Undefined()
+
     def is_context_function(self, obj):
         return isinstance(obj, _context_function_types) and \
                getattr(obj, 'contextfunction', False)
@@ -60,3 +67,6 @@ class CompilerConfig(object):
 
     def get_tests(self):
         return {}
+
+    def wrap_loop(self, iterator, parent=None):
+        return LoopContext(iterator, parent)

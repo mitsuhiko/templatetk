@@ -54,12 +54,12 @@ class EvalContext(object):
     to it in extensions.
     """
 
-    def __init__(self, compiler_config, template_name=None):
-        self.compiler_config = compiler_config
-        self.autoescape = compiler_config.get_autoescape_default(template_name)
+    def __init__(self, config, template_name=None):
+        self.config = config
+        self.autoescape = config.get_autoescape_default(template_name)
         self.volatile = False
-        self.filters = compiler_config.get_filters()
-        self.tests = compiler_config.get_tests()
+        self.filters = config.get_filters()
+        self.tests = config.get_tests()
 
     def save(self):
         return self.__dict__.copy()
@@ -98,8 +98,8 @@ class Node(object):
     All nodes have fields and attributes.  Fields may be other nodes, lists,
     or arbitrary values.  Fields are passed to the constructor as regular
     positional arguments, attributes as keyword arguments.  Each node has
-    two attributes: `lineno` (the line number of the node) and `compiler_config`.
-    The `compiler_config` attribute is set at the end of the parsing process for
+    two attributes: `lineno` (the line number of the node) and `config`.
+    The `config` attribute is set at the end of the parsing process for
     all nodes automatically.
     """
     __metaclass__ = NodeType
@@ -199,12 +199,12 @@ class Node(object):
             todo.extend(node.iter_child_nodes())
         return self
 
-    def set_compiler_config(self, compiler_config):
-        """Set the compiler_config for all nodes."""
+    def set_config(self, config):
+        """Set the config for all nodes."""
         todo = deque([self])
         while todo:
             node = todo.popleft()
-            node.compiler_config = compiler_config
+            node.config = config
             todo.extend(node.iter_child_nodes())
         return self
 
@@ -330,7 +330,7 @@ class Expr(Node):
 
         An :class:`EvalContext` can be provided, if none is given
         a default context is created which requires the nodes to have
-        an attached compiler_config.
+        an attached config.
 
         .. versionchanged:: 2.4
            the `eval_ctx` parameter was added.
@@ -341,6 +341,9 @@ class Expr(Node):
         """Check if it's possible to assign something to this node."""
         return False
 
+    def assign_to_context(self, context, item):
+        raise NotImplementedError()
+
 
 class BinExpr(Expr):
     """Baseclass for all binary expressions."""
@@ -350,8 +353,8 @@ class BinExpr(Expr):
 
     def as_const(self, eval_ctx):
         # intercepted operators cannot be folded at compile time
-        if self.compiler_config.sandboxed and \
-           self.operator in self.compiler_config.intercepted_binops:
+        if self.config.sandboxed and \
+           self.operator in self.config.intercepted_binops:
             raise Impossible()
         f = _binop_to_func[self.operator]
         try:
@@ -368,8 +371,8 @@ class UnaryExpr(Expr):
 
     def as_const(self, eval_ctx):
         # intercepted operators cannot be folded at compile time
-        if self.compiler_config.sandboxed and \
-           self.operator in self.compiler_config.intercepted_unops:
+        if self.config.sandboxed and \
+           self.operator in self.config.intercepted_unops:
             raise Impossible()
         f = _uaop_to_func[self.operator]
         try:
@@ -392,6 +395,10 @@ class Name(Expr):
         return self.name not in ('true', 'false', 'none',
                                  'True', 'False', 'None')
 
+    def assign_to_context(self, context, item):
+        assert isinstance(self.can_assign()), 'Not assignable node'
+        context[self.name] = item
+
 
 class Literal(Expr):
     """Baseclass for literals."""
@@ -410,7 +417,7 @@ class Const(Literal):
         return self.value
 
     @classmethod
-    def from_untrusted(cls, value, lineno=None, compiler_config=None):
+    def from_untrusted(cls, value, lineno=None, config=None):
         """Return a const object if the value is representable as
         constant value in the generated code, otherwise it will raise
         an `Impossible` exception.
@@ -418,7 +425,7 @@ class Const(Literal):
         from compiler import has_safe_repr
         if not has_safe_repr(value):
             raise Impossible()
-        return cls(value, lineno=lineno, compiler_config=compiler_config)
+        return cls(value, lineno=lineno, config=config)
 
 
 class TemplateData(Literal):
@@ -444,10 +451,20 @@ class Tuple(Literal):
         return tuple(x.as_const(eval_ctx) for x in self.items)
 
     def can_assign(self):
+        if not self.ctx == 'store':
+            return False
         for item in self.items:
             if not item.can_assign():
                 return False
         return True
+
+    def assign_to_context(self, context, item):
+        assert self.can_assign(), 'tried to assign to %r' % item
+        items = tuple(item)
+        if len(items) != len(self.items):
+            raise ValueError('Error on tuple unpacking, dimensions dont match')
+        for node, tuple_item in izip(self.item, items):
+            node.assign_to_context(context, tuple_item)
 
 
 class List(Literal):
@@ -565,9 +582,9 @@ class Call(Expr):
 
         # don't evaluate context functions
         args = [x.as_const(eval_ctx) for x in self.args]
-        if eval_ctx.compiler_config.is_context_function(obj):
+        if eval_ctx.config.is_context_function(obj):
             raise Impossible()
-        elif eval_ctx.compiler_config.is_eval_context_function(obj):
+        elif eval_ctx.config.is_eval_context_function(obj):
             args.insert(0, eval_ctx)
 
         kwargs = dict(x.as_const(eval_ctx) for x in self.kwargs)
@@ -595,7 +612,7 @@ class Getitem(Expr):
         if self.ctx != 'load':
             raise Impossible()
         try:
-            return self.compiler_config.getitem(self.node.as_const(eval_ctx),
+            return self.config.getitem(self.node.as_const(eval_ctx),
                                                 self.arg.as_const(eval_ctx))
         except Exception:
             raise Impossible()
@@ -614,8 +631,8 @@ class Getattr(Expr):
         if self.ctx != 'load':
             raise Impossible()
         try:
-            return self.compiler_config.getattr(self.node.as_const(eval_ctx),
-                                                self.attr)
+            return self.config.getattr(self.node.as_const(eval_ctx),
+                                       self.attr)
         except Exception:
             raise Impossible()
 

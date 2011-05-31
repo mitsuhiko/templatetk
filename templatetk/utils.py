@@ -11,3 +11,18 @@
 
 # bundle?
 from markupsafe import Markup
+
+
+
+class _Missing(object):
+    __slots__ = ()
+
+    def __repr__(self):
+        return 'missing'
+
+    def __reduce__(self):
+        return 'missing'
+
+
+missing = _Missing()
+del _Missing
