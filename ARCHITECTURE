@@ -1,0 +1,36 @@
+General Architecture
+====================
+
+    “Complex is better than complicated”
+    
+Django-Template-Compilation aka templatetk should probably be called "The
+Onion Compiler".  It has multiple modes of operation, at least that is the
+plan.
+
+The levels of execution:
+
+1.  **The template language** is the top of the stack.  This can be any
+    template language with semantics supported by the template toolkit.
+    Currently Django and Jinja2 are planned, but everybody could create
+    their own template language on top of this.  That template language
+    most likely has its own parser/lexer and AST representation.
+
+2.  **The Abstract Template Syntax Tree** is the next level down.  From
+    the template language's syntax tree an abstract template syntax tree
+    is created.  This syntax tree can be either compiled to something else
+    or interpreted according to the template toolkit execution rules:
+
+    1.  The first option is creating a Python **Abstract syntax tree** and
+        then compiling that to Python bytecode or compiling it to actual
+        Python code.  The former is recommended as it keeps the line
+        numbers for debugging purposes, but it does not work on GAE.  The
+        second option is generating actual Python code.
+
+    2.  The second option is interpreting the ATST in place with an AST
+        interpreter provided.  It should result in the same execution
+        flow as the compiled code, but has different runtime performance
+        rules and is probably slower by an order of magnitude.
+
+In short: template code -> template language specific syntax tree
+(optional) -> abstract template syntax tree -> python abstract syntax tree
+-> bytecode.
