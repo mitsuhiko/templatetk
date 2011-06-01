@@ -35,6 +35,10 @@ Django Performance Limitations
     django forloop thing would even have to emulate a dictionary interface
     to say backwards compatible in that regard.
 
+-   Django has customiziable to-unicode behavior (smart_str)
+
+-   Django does not complain on unpacking tuples in loops.
+
 Possible Counters
 -----------------
 

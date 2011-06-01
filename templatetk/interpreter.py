@@ -27,7 +27,8 @@ def _assign_name(node, value, context):
 
 def _assign_tuple(node, value, context):
     values = tuple(value)
-    if len(values) != len(node.items):
+    if context.config.strict_tuple_unpacking and \
+       len(values) != len(node.items):
         raise ValueError('Dimension mismatch on tuple unpacking')
     for subnode, item_val in izip(node.items, value):
         assign_to_context(subnode, item_val, context)

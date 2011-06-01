@@ -14,8 +14,6 @@ import operator
 from itertools import izip
 from collections import deque
 
-from templatetk.utils import Markup
-
 
 _binop_to_func = {
     '*':        operator.mul,
@@ -326,19 +324,6 @@ class Expr(Node):
     """Baseclass for all expressions."""
     abstract = True
 
-    def as_const(self, eval_ctx):
-        """Return the value of the expression as constant or raise
-        :exc:`Impossible` if this was not possible.
-
-        An :class:`EvalContext` can be provided, if none is given
-        a default context is created which requires the nodes to have
-        an attached config.
-
-        .. versionchanged:: 2.4
-           the `eval_ctx` parameter was added.
-        """
-        raise Impossible()
-
     def can_assign(self):
         """Check if it's possible to assign something to this node."""
         return False
@@ -350,34 +335,12 @@ class BinExpr(Expr):
     operator = None
     abstract = True
 
-    def as_const(self, eval_ctx):
-        # intercepted operators cannot be folded at compile time
-        if self.config.sandboxed and \
-           self.operator in self.config.intercepted_binops:
-            raise Impossible()
-        f = _binop_to_func[self.operator]
-        try:
-            return f(self.left.as_const(eval_ctx), self.right.as_const(eval_ctx))
-        except Exception:
-            raise Impossible()
-
 
 class UnaryExpr(Expr):
     """Baseclass for all unary expressions."""
     fields = ('node',)
     operator = None
     abstract = True
-
-    def as_const(self, eval_ctx):
-        # intercepted operators cannot be folded at compile time
-        if self.config.sandboxed and \
-           self.operator in self.config.intercepted_unops:
-            raise Impossible()
-        f = _uaop_to_func[self.operator]
-        try:
-            return f(self.node.as_const(eval_ctx))
-        except Exception:
-            raise Impossible()
 
 
 class Name(Expr):
@@ -410,9 +373,6 @@ class Const(Literal):
     """
     fields = ('value',)
 
-    def as_const(self, eval_ctx):
-        return self.value
-
     @classmethod
     def from_untrusted(cls, value, lineno=None, config=None):
         """Return a const object if the value is representable as
@@ -429,13 +389,6 @@ class TemplateData(Literal):
     """A constant template string."""
     fields = ('data',)
 
-    def as_const(self, eval_ctx):
-        if eval_ctx.volatile:
-            raise Impossible()
-        if eval_ctx.autoescape:
-            return Markup(self.data)
-        return self.data
-
 
 class Tuple(Literal):
     """For loop unpacking and some other things like multiple arguments
@@ -443,9 +396,6 @@ class Tuple(Literal):
     is used for loading the names or storing.
     """
     fields = ('items', 'ctx')
-
-    def as_const(self, eval_ctx):
-        return tuple(x.as_const(eval_ctx) for x in self.items)
 
     def can_assign(self):
         if self.ctx != 'store':
@@ -460,9 +410,6 @@ class List(Literal):
     """Any list literal such as ``[1, 2, 3]``"""
     fields = ('items',)
 
-    def as_const(self, eval_ctx):
-        return [x.as_const(eval_ctx) for x in self.items]
-
 
 class Dict(Literal):
     """Any dict literal such as ``{1: 2, 3: 4}``.  The items must be a list of
@@ -470,24 +417,15 @@ class Dict(Literal):
     """
     fields = ('items',)
 
-    def as_const(self, eval_ctx):
-        return dict(x.as_const(eval_ctx) for x in self.items)
-
 
 class Pair(Helper):
     """A key, value pair for dicts."""
     fields = ('key', 'value')
 
-    def as_const(self, eval_ctx):
-        return self.key.as_const(eval_ctx), self.value.as_const(eval_ctx)
-
 
 class Keyword(Helper):
     """A key, value pair for keyword arguments where key is a string."""
     fields = ('key', 'value')
-
-    def as_const(self, eval_ctx):
-        return self.key, self.value.as_const(eval_ctx)
 
 
 class CondExpr(Expr):
@@ -495,16 +433,6 @@ class CondExpr(Expr):
     foo if bar else baz }}``)
     """
     fields = ('test', 'expr1', 'expr2')
-
-    def as_const(self, eval_ctx):
-        if self.test.as_const(eval_ctx):
-            return self.expr1.as_const(eval_ctx)
-
-        # if we evaluate to an undefined object, we better do that at runtime
-        if self.expr2 is None:
-            raise Impossible()
-
-        return self.expr2.as_const(eval_ctx)
 
 
 class Filter(Expr):
@@ -515,37 +443,6 @@ class Filter(Expr):
     filtered.  Buffers are created by macros and filter blocks.
     """
     fields = ('node', 'name', 'args', 'kwargs', 'dyn_args', 'dyn_kwargs')
-
-    def as_const(self, eval_ctx):
-        if eval_ctx.volatile or self.node is None:
-            raise Impossible()
-        # we have to be careful here because we call filter_ below.
-        # if this variable would be called filter, 2to3 would wrap the
-        # call in a list beause it is assuming we are talking about the
-        # builtin filter function here which no longer returns a list in
-        # python 3.  because of that, do not rename filter_ to filter!
-        filter_ = eval_ctx.filters.get(self.name)
-        if filter_ is None or getattr(filter_, 'contextfilter', False):
-            raise Impossible()
-        obj = self.node.as_const(eval_ctx)
-        args = [x.as_const(eval_ctx) for x in self.args]
-        if getattr(filter_, 'evalcontextfilter', False):
-            args.insert(0, eval_ctx)
-        kwargs = dict(x.as_const(eval_ctx) for x in self.kwargs)
-        if self.dyn_args is not None:
-            try:
-                args.extend(self.dyn_args.as_const(eval_ctx))
-            except Exception:
-                raise Impossible()
-        if self.dyn_kwargs is not None:
-            try:
-                kwargs.update(self.dyn_kwargs.as_const(eval_ctx))
-            except Exception:
-                raise Impossible()
-        try:
-            return filter_(obj, *args, **kwargs)
-        except Exception:
-            raise Impossible()
 
 
 class Test(Expr):
@@ -564,47 +461,10 @@ class Call(Expr):
     """
     fields = ('node', 'args', 'kwargs', 'dyn_args', 'dyn_kwargs')
 
-    def as_const(self, eval_ctx):
-        if eval_ctx.volatile:
-            raise Impossible()
-        obj = self.node.as_const(eval_ctx)
-
-        # don't evaluate context functions
-        args = [x.as_const(eval_ctx) for x in self.args]
-        if eval_ctx.config.is_context_function(obj):
-            raise Impossible()
-        elif eval_ctx.config.is_eval_context_function(obj):
-            args.insert(0, eval_ctx)
-
-        kwargs = dict(x.as_const(eval_ctx) for x in self.kwargs)
-        if self.dyn_args is not None:
-            try:
-                args.extend(self.dyn_args.as_const(eval_ctx))
-            except Exception:
-                raise Impossible()
-        if self.dyn_kwargs is not None:
-            try:
-                kwargs.update(self.dyn_kwargs.as_const(eval_ctx))
-            except Exception:
-                raise Impossible()
-        try:
-            return obj(*args, **kwargs)
-        except Exception:
-            raise Impossible()
-
 
 class Getitem(Expr):
     """Get an attribute or item from an expression and prefer the item."""
     fields = ('node', 'arg', 'ctx')
-
-    def as_const(self, eval_ctx):
-        if self.ctx != 'load':
-            raise Impossible()
-        try:
-            return self.config.getitem(self.node.as_const(eval_ctx),
-                                                self.arg.as_const(eval_ctx))
-        except Exception:
-            raise Impossible()
 
     def can_assign(self):
         return False
@@ -616,15 +476,6 @@ class Getattr(Expr):
     """
     fields = ('node', 'attr', 'ctx')
 
-    def as_const(self, eval_ctx):
-        if self.ctx != 'load':
-            raise Impossible()
-        try:
-            return self.config.getattr(self.node.as_const(eval_ctx),
-                                       self.attr)
-        except Exception:
-            raise Impossible()
-
     def can_assign(self):
         return False
 
@@ -635,13 +486,6 @@ class Slice(Expr):
     """
     fields = ('start', 'stop', 'step')
 
-    def as_const(self, eval_ctx):
-        def const(obj):
-            if obj is None:
-                return None
-            return obj.as_const(eval_ctx)
-        return slice(const(self.start), const(self.stop), const(self.step))
-
 
 class Concat(Expr):
     """Concatenates the list of expressions provided after converting them to
@@ -649,27 +493,12 @@ class Concat(Expr):
     """
     fields = ('nodes',)
 
-    def as_const(self, eval_ctx):
-        return u''.join(eval_ctx.config.to_unicode(x.as_const(eval_ctx))
-                        for x in self.nodes)
-
 
 class Compare(Expr):
     """Compares an expression with some other expressions.  `ops` must be a
     list of :class:`Operand`\s.
     """
     fields = ('expr', 'ops')
-
-    def as_const(self, eval_ctx):
-        result = value = self.expr.as_const(eval_ctx)
-        try:
-            for op in self.ops:
-                new_value = op.expr.as_const(eval_ctx)
-                result = _cmpop_to_func[op.op](value, new_value)
-                value = new_value
-        except Exception:
-            raise Impossible()
-        return result
 
 
 class Operand(Helper):
@@ -723,16 +552,10 @@ class And(BinExpr):
     """Short circuited AND."""
     operator = 'and'
 
-    def as_const(self, eval_ctx):
-        return self.left.as_const(eval_ctx) and self.right.as_const(eval_ctx)
-
 
 class Or(BinExpr):
     """Short circuited OR."""
     operator = 'or'
-
-    def as_const(self, eval_ctx):
-        return self.left.as_const(eval_ctx) or self.right.as_const(eval_ctx)
 
 
 class Not(UnaryExpr):
@@ -754,9 +577,6 @@ class MarkSafe(Expr):
     """Mark the wrapped expression as safe (wrap it as `Markup`)."""
     fields = ('expr',)
 
-    def as_const(self, eval_ctx):
-        return Markup(self.expr.as_const(eval_ctx))
-
 
 class MarkSafeIfAutoescape(Expr):
     """Mark the wrapped expression as safe (wrap it as `Markup`) but
@@ -765,14 +585,6 @@ class MarkSafeIfAutoescape(Expr):
     .. versionadded:: 2.5
     """
     fields = ('expr',)
-
-    def as_const(self, eval_ctx):
-        if eval_ctx.volatile:
-            raise Impossible()
-        expr = self.expr.as_const(eval_ctx)
-        if eval_ctx.autoescape:
-            return Markup(expr)
-        return expr
 
 
 class ContextReference(Expr):
