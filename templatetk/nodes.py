@@ -257,10 +257,8 @@ class For(Stmt):
     :class:`Name` or :class:`Tuple`), `iter` the iterable.  `body` is a list
     of nodes that are used as loop-body, and `else_` a list of nodes for the
     `else` block.  If no else node exists it has to be an empty list.
-
-    For filtered nodes an expression can be stored as `test`, otherwise `None`.
     """
-    fields = ('target', 'iter', 'body', 'else_', 'test')
+    fields = ('target', 'iter', 'body', 'else_')
 
 
 class If(Stmt):

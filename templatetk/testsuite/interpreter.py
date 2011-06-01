@@ -35,7 +35,7 @@ class ForLoopTestCase(TemplateTestCase):
         template = n.Template([
             n.For(n.Name('item', 'store'), n.Name('iterable', 'load'), [
                 n.Output([n.Name('item', 'load')])
-            ], None, None)
+            ], None)
         ])
 
         ctx = self.make_context(iterable=[1, 2, 3, 4])
@@ -49,7 +49,7 @@ class ForLoopTestCase(TemplateTestCase):
                           n.Getattr(n.Name('loop', 'load'),
                                     n.Const('index0'), 'load'),
                           n.Const(';')])
-            ], None, None)
+            ], None)
         ])
 
         ctx = self.make_context(iterable=[1, 2, 3, 4])

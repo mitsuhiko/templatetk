@@ -58,9 +58,10 @@ class Interpreter(NodeVisitor):
             node.assign_to_context(context, tuple_item)
 
     def visit_block(self, nodes, context):
-        for node in nodes:
-            for event in self.visit(node, context):
-                yield event
+        if nodes:
+            for node in nodes:
+                for event in self.visit(node, context):
+                    yield event
 
     def visit_Template(self, node, context):
         for event in self.visit_block(node.body, context):
@@ -78,17 +79,6 @@ class Interpreter(NodeVisitor):
         if self.config.forloop_parent_access:
             parent = context.get(self.config.forloop_accessor)
         iterator = self.visit(node.iter, context)
-
-        # TODO: jinja2 leftover, should this be expressed differently?
-        if node.test is not None:
-            context.push()
-            filtered = []
-            for item in iterator:
-                assign_to_context(node.target, item, context)
-                if self.visit(node.test, context):
-                    filtered.append(item)
-            context.pop()
-            iterator = filtered
 
         context.push()
         iterated = False
