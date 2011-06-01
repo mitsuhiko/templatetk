@@ -86,3 +86,11 @@ class Interpreter(NodeVisitor):
     def visit_Name(self, node, context):
         assert node.ctx == 'load', 'visiting store nodes does not make sense'
         return node.load_from_context(context)
+
+    def visit_Getattr(self, node, context):
+        obj = self.visit(node.node, context)
+        attr = self.visit(node.attr, context)
+        return self.config.getattr(obj, attr)
+
+    def visit_Const(self, node, context):
+        return node.value

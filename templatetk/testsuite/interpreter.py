@@ -41,6 +41,20 @@ class ForLoopTestCase(TemplateTestCase):
         ctx = self.make_context(iterable=[1, 2, 3, 4])
         self.assert_result_matches(template, ctx, '1234')
 
+    def test_loop_with_counter(self):
+        n = nodes
+        template = n.Template([
+            n.For(n.Name('item', 'store'), n.Name('iterable', 'load'), [
+                n.Output([n.Name('item', 'load'), n.Const(':'),
+                          n.Getattr(n.Name('loop', 'load'),
+                                    n.Const('index0'), 'load'),
+                          n.Const(';')])
+            ], None, None)
+        ])
+
+        ctx = self.make_context(iterable=[1, 2, 3, 4])
+        self.assert_result_matches(template, ctx, '1:0;2:1;3:2;4:3;')
+
 
 def suite():
     import unittest

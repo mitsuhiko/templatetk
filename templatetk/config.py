@@ -38,8 +38,8 @@ class Config(object):
     def getattr(self, object, attribute):
         # XXX: better defaults maybe
         try:
-            return getattr(object, attribute)
-        except AttributeError:
+            return getattr(object, str(attribute))
+        except (UnicodeError, AttributeError):
             try:
                 return object[attribute]
             except (TypeError, LookupError):
