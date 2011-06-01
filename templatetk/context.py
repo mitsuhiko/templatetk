@@ -30,7 +30,6 @@ class Context(object):
 
     def push(self):
         self._needs_push = True
-        self._stacked.append(self._variables.copy())
 
     def pop(self):
         if self._needs_push > 0:
@@ -41,7 +40,7 @@ class Context(object):
     def __setitem__(self, key, value):
         if self._needs_push > 0:
             for x in xrange(self._needs_push):
-                self._stacked.push(self._variables.copy())
+                self._stacked.append(self._variables.copy())
             self._needs_push = 0
         self._variables[key] = value
 

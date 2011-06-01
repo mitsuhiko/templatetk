@@ -69,4 +69,4 @@ class Config(object):
         return {}
 
     def wrap_loop(self, iterator, parent=None):
-        return LoopContext(iterator, parent)
+        return LoopContext(iterator)

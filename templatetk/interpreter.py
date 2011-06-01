@@ -11,27 +11,28 @@
 from templatetk.nodeutils import NodeVisitor
 
 
-
 class Interpreter(NodeVisitor):
 
     def __init__(self, config):
+        NodeVisitor.__init__(self)
         self.config = config
 
     def evaluate(self, node, context):
         assert context.config is self.config, 'config mismatch'
         return self.visit(node, context)
 
-    def visit_block(self, node, context):
-        for listval in self.visit_list(node, context):
-            for event in listval:
+    def visit_block(self, nodes, context):
+        for node in nodes:
+            for event in self.visit(node, context):
                 yield event
 
     def visit_Template(self, node, context):
-        self.visit(node.body, context)
+        for event in self.visit_block(node.body, context):
+            yield event
 
     def visit_Output(self, node, context):
         for node in node.nodes:
-            yield self.visit(node, context)
+            yield unicode(self.visit(node, context))
 
     def visit_Extends(self, node, context):
         raise NotImplementedError('add me, add me')
@@ -55,7 +56,7 @@ class Interpreter(NodeVisitor):
 
         context.push()
         iterated = False
-        for loop_context, item in self.config.wrap_loop(iterator, parent):
+        for item, loop_context in self.config.wrap_loop(iterator, parent):
             iterated = True
             context[self.config.forloop_accessor] = loop_context
             node.target.assign_to_context(context, item)
@@ -81,3 +82,7 @@ class Interpreter(NodeVisitor):
         for event in eventiter:
             yield event
         context.pop()
+
+    def visit_Name(self, node, context):
+        assert node.ctx == 'load', 'visiting store nodes does not make sense'
+        return node.load_from_context(context)
