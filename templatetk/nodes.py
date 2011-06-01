@@ -75,14 +75,18 @@ class NodeType(type):
     automatically forwarded to the child."""
 
     def __new__(cls, name, bases, d):
+        newslots = []
         for attr in 'fields', 'attributes':
+            names = d.get(attr, ())
             storage = []
             storage.extend(getattr(bases[0], attr, ()))
-            storage.extend(d.get(attr, ()))
+            storage.extend(names)
             assert len(bases) == 1, 'multiple inheritance not allowed'
             assert len(storage) == len(set(storage)), 'layout conflict'
             d[attr] = tuple(storage)
+            newslots.extend(names)
         d.setdefault('abstract', False)
+        d['__slots__'] = newslots
         return type.__new__(cls, name, bases, d)
 
 
