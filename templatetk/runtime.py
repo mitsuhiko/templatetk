@@ -10,8 +10,11 @@
 """
 
 
-class LoopContext(object):
-    """A loop context for dynamic iteration."""
+class LoopContextBase(object):
+    """Base implementation for a loop context.  Solves most problems a
+    loop context has to solve and implements the base interface that is
+    required by the system.
+    """
 
     def __init__(self, iterable):
         self._iterator = iter(iterable)
@@ -25,6 +28,27 @@ class LoopContext(object):
             self._length = len(iterable)
         except (TypeError, AttributeError):
             self._length = None
+
+    @property
+    def length(self):
+        if self._length is None:
+            # if was not possible to get the length of the iterator when
+            # the loop context was created (ie: iterating over a generator)
+            # we have to convert the iterable into a sequence and use the
+            # length of that.
+            iterable = tuple(self._iterator)
+            self._iterator = iter(iterable)
+            self._length = len(iterable) + self.index0 + 1
+        return self._length
+
+    def __iter__(self):
+        return LoopContextIterator(self)
+
+
+class LoopContext(LoopContextBase):
+    """A loop context for dynamic iteration.  This does not have to be used
+    but it's a good base implementation.
+    """
 
     def cycle(self, *args):
         """Cycles among the arguments with the current loop index."""
@@ -40,21 +64,6 @@ class LoopContext(object):
 
     def __len__(self):
         return self.length
-
-    def __iter__(self):
-        return LoopContextIterator(self)
-
-    @property
-    def length(self):
-        if self._length is None:
-            # if was not possible to get the length of the iterator when
-            # the loop context was created (ie: iterating over a generator)
-            # we have to convert the iterable into a sequence and use the
-            # length of that.
-            iterable = tuple(self._iterator)
-            self._iterator = iter(iterable)
-            self._length = len(iterable) + self.index0 + 1
-        return self._length
 
     def __repr__(self):
         return '<%s %r/%r>' % (
