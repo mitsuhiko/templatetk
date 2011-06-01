@@ -45,6 +45,9 @@ class Config(object):
             except (TypeError, LookupError):
                 return Undefined()
 
+    def to_unicode(self, obj):
+        return unicode(obj)
+
     def is_undefined(self, obj):
         return isinstance(obj, Undefined)
 

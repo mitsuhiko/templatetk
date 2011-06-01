@@ -69,7 +69,7 @@ class Interpreter(NodeVisitor):
 
     def visit_Output(self, node, context):
         for node in node.nodes:
-            yield unicode(self.visit(node, context))
+            yield self.config.to_unicode(self.visit(node, context))
 
     def visit_Extends(self, node, context):
         raise NotImplementedError('add me, add me')

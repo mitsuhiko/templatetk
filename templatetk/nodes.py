@@ -646,7 +646,8 @@ class Concat(Expr):
     fields = ('nodes',)
 
     def as_const(self, eval_ctx):
-        return ''.join(unicode(x.as_const(eval_ctx)) for x in self.nodes)
+        return u''.join(eval_ctx.config.to_unicode(x.as_const(eval_ctx))
+                        for x in self.nodes)
 
 
 class Compare(Expr):
