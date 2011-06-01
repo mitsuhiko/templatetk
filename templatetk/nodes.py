@@ -341,12 +341,6 @@ class Expr(Node):
         """Check if it's possible to assign something to this node."""
         return False
 
-    def assign_to_context(self, context, item):
-        raise NotImplementedError()
-
-    def load_from_context(self, context):
-        raise NotImplementedError()
-
 
 class BinExpr(Expr):
     """Baseclass for all binary expressions."""
@@ -399,13 +393,6 @@ class Name(Expr):
             return False
         return self.name not in ('true', 'false', 'none',
                                  'True', 'False', 'None')
-
-    def assign_to_context(self, context, item):
-        assert self.can_assign(), 'Not assignable node'
-        context[self.name] = item
-
-    def load_from_context(self, context):
-        return context.resolve(self.name)
 
 
 class Literal(Expr):
@@ -465,20 +452,6 @@ class Tuple(Literal):
             if not item.can_assign():
                 return False
         return True
-
-    def assign_to_context(self, context, item):
-        assert self.can_assign(), 'tried to assign to %r' % item
-        items = tuple(item)
-        if len(items) != len(self.items):
-            raise ValueError('Error on tuple unpacking, dimensions dont match')
-        for node, tuple_item in izip(self.items, items):
-            node.assign_to_context(context, tuple_item)
-
-    def load_from_context(self, context):
-        result = len(self.item)
-        for node in self.items:
-            result.append(node.load_from_context(context))
-        return tuple(result)
 
 
 class List(Literal):
