@@ -10,9 +10,8 @@
 """
 from templatetk.testsuite import TemplateTestCase
 from templatetk import nodes
-from templatetk.interpreter import Interpreter
+from templatetk.interpreter import Interpreter, Context
 from templatetk.config import Config
-from templatetk.context import Context
 
 
 class ForLoopTestCase(TemplateTestCase):
