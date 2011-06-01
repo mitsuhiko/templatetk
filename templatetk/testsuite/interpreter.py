@@ -10,7 +10,7 @@
 """
 from templatetk.testsuite import TemplateTestCase
 from templatetk import nodes
-from templatetk.interpreter import Interpreter, Context
+from templatetk.interpreter import Interpreter, BasicInterpreterState
 from templatetk.config import Config
 
 
@@ -20,14 +20,9 @@ class ForLoopTestCase(TemplateTestCase):
         self.intrptr = Interpreter(Config())
 
     def assert_result_matches(self, node, ctx, expected):
-        rv = u''.join(self.intrptr.evaluate(node, ctx))
+        state = BasicInterpreterState(self.intrptr.config, ctx)
+        rv = u''.join(self.intrptr.evaluate(node, state))
         self.assert_equal(rv, expected)
-
-    def make_context(self, *args, **kwargs):
-        rv = Context(self.intrptr.config)
-        for key, value in dict(*args, **kwargs).iteritems():
-            rv[key] = value
-        return rv
 
     def test_basic_loop(self):
         n = nodes
@@ -37,8 +32,9 @@ class ForLoopTestCase(TemplateTestCase):
             ], None)
         ])
 
-        ctx = self.make_context(iterable=[1, 2, 3, 4])
-        self.assert_result_matches(template, ctx, '1234')
+        self.assert_result_matches(template, dict(
+            iterable=[1, 2, 3, 4]
+        ), '1234')
 
     def test_loop_with_counter(self):
         n = nodes
@@ -51,8 +47,9 @@ class ForLoopTestCase(TemplateTestCase):
             ], None)
         ])
 
-        ctx = self.make_context(iterable=[1, 2, 3, 4])
-        self.assert_result_matches(template, ctx, '1:0;2:1;3:2;4:3;')
+        self.assert_result_matches(template, dict(
+            iterable=[1, 2, 3, 4]
+        ), '1:0;2:1;3:2;4:3;')
 
 
 def suite():

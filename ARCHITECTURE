@@ -7,7 +7,8 @@ Django-Template-Compilation aka templatetk should probably be called "The
 Onion Compiler".  It has multiple modes of operation, at least that is the
 plan.
 
-The levels of execution:
+The Levels of Execution
+-----------------------
 
 1.  **The template language** is the top of the stack.  This can be any
     template language with semantics supported by the template toolkit.
@@ -34,3 +35,15 @@ The levels of execution:
 In short: template code -> template language specific syntax tree
 (optional) -> abstract template syntax tree -> python abstract syntax tree
 -> bytecode.
+
+Interpreter Design
+------------------
+
+The interpreter is the simple part of the system.  It is intended to be
+used as a fallback when compilation does not make sense or is not
+required.  The interpretation of the code has the disadvantage that the
+native Python traceback system cannot be used to debug templates but that
+way the system will run on GAE and other restricted environments too.
+
+Also the interpreter has a straightforward design which makes it easy to
+experiment with a template language.

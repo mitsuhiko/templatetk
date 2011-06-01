@@ -11,21 +11,20 @@
 from itertools import izip
 
 from templatetk.nodeutils import NodeVisitor
-from templatetk.utils import missing
 from templatetk import nodes
 
 
-def _assign_name(node, value, context):
-    context[node.name] = value
+def _assign_name(node, value, state):
+    state.assign_var(node.name, value)
 
 
-def _assign_tuple(node, value, context):
+def _assign_tuple(node, value, state):
     values = tuple(value)
-    if context.config.strict_tuple_unpacking and \
+    if state.config.strict_tuple_unpacking and \
        len(values) != len(node.items):
         raise ValueError('Dimension mismatch on tuple unpacking')
     for subnode, item_val in izip(node.items, value):
-        assign_to_context(subnode, item_val, context)
+        assign_to_state(subnode, item_val, state)
 
 
 _node_assigners = {
@@ -34,129 +33,51 @@ _node_assigners = {
 }
 
 
-def assign_to_context(node, value, context):
+def assign_to_state(node, value, state):
     func = _node_assigners[node.__class__]
     assert node.can_assign() and func is not None, \
         'Cannot assign to %r' % node
-    return func(node, value, context)
+    return func(node, value, state)
 
 
-class ContextMixin(object):
-    """Baseclass for native contexts and context adapters."""
-
-    def push(self):
-        raise NotImplementedError()
-
-    def pop(self):
-        raise NotImplementedError()
-
-    def __setitem__(self, key, value):
-        raise NotImplementedError()
-
-    def __getitem__(self, key):
-        raise NotImplementedError()
-
-    def __contains__(self, key):
-        raise NotImplementedError()
-
-    def __iter__(self):
-        return self.iterkeys()
-
-    def resolve(self, key):
-        try:
-            return self[key]
-        except KeyError:
-            return self.config.undefined_variable(key)
-
-    def iterkeys(self):
-        raise NotImplementedError()
-
-    def iteritems(self):
-        for key in self.iterkeys():
-            yield key, self[key]
-
-    def itervalues(self):
-        for key, value in self.iteritems():
-            yield value
-
-    def items(self):
-        return list(self.iteritems())
-
-    def keys(self):
-        return list(self.iterkeys())
-
-    def values(self):
-        return list(self.itervalues())
-
-
-class ContextAdapter(ContextMixin):
-    """Can be used to convert the interface of a template engine's context
-    object to the interface the interpreter expects.
-    """
-
-    def __init__(self, config, context):
-        self.config = config
-        self.context = context
-
-    def __setitem__(self, key, value):
-        self.context[key] = value
-
-    def __getitem__(self, key):
-        return self.context[key]
-
-    def __contains__(self, key):
-        return key in self.context
-
-
-class Context(ContextMixin):
-    """Data source and store for the interpreter."""
+class InterpreterState(object):
 
     def __init__(self, config):
         self.config = config
-        self._variables = {}
-        self._stacked = []
 
-        # TODO: track push state per level?  (if if if for, outer three not
-        # modified, no need to copy).  Push dicts into stack alternatively?
-        # TODO: timing
-        self._needs_push = 0
+    def push_frame(self):
+        pass
 
-    def push(self):
-        self._needs_push = True
+    def pop_frame(self):
+        pass
 
-    def pop(self):
-        if self._needs_push > 0:
-            self._needs_push -= 1
-        else:
-            self._variables = self._stacked.pop()
+    def assign_var(self, key, value):
+        pass
 
-    def __setitem__(self, key, value):
-        if self._needs_push > 0:
-            for x in xrange(self._needs_push):
-                self._stacked.append(self._variables.copy())
-            self._needs_push = 0
-        self._variables[key] = value
+    def resolve_var(self, key):
+        pass
 
-    def __getitem__(self, key):
-        return self._variables[key]
 
-    def __contains__(self, key):
-        return key in self._variables
+class BasicInterpreterState(InterpreterState):
 
-    def resolve(self, key):
-        rv = self._variables.get(key, missing)
-        if rv is not missing:
-            return rv
+    def __init__(self, config, context):
+        self.config = config
+        self.context = [context]
+
+    def push_frame(self):
+        self.context.append({})
+
+    def pop_frame(self):
+        self.context.pop()
+
+    def assign_var(self, key, value):
+        self.context[-1][key] = value
+
+    def resolve_var(self, key):
+        for d in reversed(self.context):
+            if key in d:
+                return d[key]
         return self.config.undefined_variable(key)
-
-    def iteritems(self):
-        return self._variables.iteritems()
-
-    def iterkeys(self):
-        return self._variables.iterkeys()
-
-    def itervalues(self):
-        return self._variables.itervalues()
 
 
 class Interpreter(NodeVisitor):
@@ -170,78 +91,78 @@ class Interpreter(NodeVisitor):
         NodeVisitor.__init__(self)
         self.config = config
 
-    def evaluate(self, node, context):
-        assert context.config is self.config, 'config mismatch'
-        return self.visit(node, context)
+    def evaluate(self, node, state):
+        assert state.config is self.config, 'config mismatch'
+        return self.visit(node, state)
 
-    def assign_to_context(self, context, node, item):
+    def assign_to_state(self, state, node, item):
         assert node.can_assign(), 'tried to assign to %r' % item
         items = tuple(item)
         if len(items) != len(self.items):
             raise ValueError('Error on tuple unpacking, dimensions dont match')
         for node, tuple_item in izip(self.items, items):
-            node.assign_to_context(context, tuple_item)
+            node.assign_to_state(state, tuple_item)
 
-    def visit_block(self, nodes, context):
+    def visit_block(self, nodes, state):
         if nodes:
             for node in nodes:
-                for event in self.visit(node, context):
+                for event in self.visit(node, state):
                     yield event
 
-    def visit_Template(self, node, context):
-        for event in self.visit_block(node.body, context):
+    def visit_Template(self, node, state):
+        for event in self.visit_block(node.body, state):
             yield event
 
-    def visit_Output(self, node, context):
+    def visit_Output(self, node, state):
         for node in node.nodes:
-            yield self.config.to_unicode(self.visit(node, context))
+            yield self.config.to_unicode(self.visit(node, state))
 
-    def visit_Extends(self, node, context):
+    def visit_Extends(self, node, state):
         raise NotImplementedError('add me, add me')
 
-    def visit_For(self, node, context):
+    def visit_For(self, node, state):
         parent = None
         if self.config.forloop_parent_access:
-            parent = context.get(self.config.forloop_accessor)
-        iterator = self.visit(node.iter, context)
+            parent = state.resolve_var(self.config.forloop_accessor)
+        iterator = self.visit(node.iter, state)
 
-        context.push()
+        state.push_frame()
         iterated = False
-        for item, loop_context in self.config.wrap_loop(iterator, parent):
+        for item, loop_state in self.config.wrap_loop(iterator, parent):
             iterated = True
-            context[self.config.forloop_accessor] = loop_context
-            assign_to_context(node.target, item, context)
-            for event in self.visit_block(node.body, context):
+            state.assign_var(self.config.forloop_accessor, loop_state)
+            assign_to_state(node.target, item, state)
+            for event in self.visit_block(node.body, state):
                 yield event
-        context.pop()
+        state.pop_frame()
 
         if not iterated and node.else_ is not None:
-            context.push()
-            for event in self.visit_block(node.else_, context):
+            state.push_frame()
+            for event in self.visit_block(node.else_, state):
                 yield event
-            context.pop()
+            state.pop_frame()
 
-    def visit_If(self, node, context):
-        test = self.visit(node.test, context)
+    def visit_If(self, node, state):
+        test = self.visit(node.test, state)
         eventiter = ()
         if test:
-            eventiter = self.visit_block(node.body, context)
+            eventiter = self.visit_block(node.body, state)
         elif node.else_ is not None:
-            eventiter = self.visit_block(node.else_, context)
+            eventiter = self.visit_block(node.else_, state)
 
-        context.push()
+        state.push_frame()
         for event in eventiter:
             yield event
-        context.pop()
+        state.pop_frame()
 
-    def visit_Name(self, node, context):
+    def visit_Name(self, node, state):
         assert node.ctx == 'load', 'visiting store nodes does not make sense'
-        return context.resolve(node.name)
+        return state.resolve_var(node.name)
 
-    def visit_Getattr(self, node, context):
-        obj = self.visit(node.node, context)
-        attr = self.visit(node.attr, context)
+    def visit_Getattr(self, node, state):
+        obj = self.visit(node.node, state)
+        attr = self.visit(node.attr, state)
         return self.config.getattr(obj, attr)
 
-    def visit_Const(self, node, context):
+    def visit_Const(self, node, state):
         return node.value
