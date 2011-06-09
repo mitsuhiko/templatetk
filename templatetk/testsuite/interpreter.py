@@ -119,6 +119,49 @@ class ForLoopTestCase(TemplateTestCase):
         self.assert_template_fails(template, dict(iterable=[1, 2, 3]),
                                    exception=TypeError, config=config)
 
+    def test_strict_loop_unpacking_behavior(self):
+        config = Config()
+        config.strict_tuple_unpacking = True
+
+        n = nodes
+        template = n.Template([
+            n.For(n.Tuple([n.Name('item', 'store'), n.Name('whoop', 'store')],
+                          'store'), n.Name('iterable', 'load'), [
+                n.Output([n.Name('item', 'load'), n.Const(';')])
+            ], None)
+        ])
+
+        self.assert_template_fails(template, dict(iterable=[(1, 2, 3)]),
+                                   exception=ValueError, config=config)
+
+    def test_lenient_loop_unpacking_behavior(self):
+        config = Config()
+        config.strict_tuple_unpacking = False
+        config.undefined_variable = lambda x: '<%s>' % x
+
+        n = nodes
+        template = n.Template([
+            n.For(n.Tuple([n.Name('item', 'store'), n.Name('whoop', 'store')],
+                          'store'), n.Name('iterable', 'load'), [
+                n.Output([n.Name('item', 'load'), n.Const(';'),
+                          n.Name('whoop', 'load')])
+            ], None)
+        ])
+
+        self.assert_result_matches(template, dict(iterable=[(1, 2, 3)]),
+            '1;2', config=config)
+
+        template = n.Template([
+            n.For(n.Tuple([n.Name('item', 'store'), n.Name('whoop', 'store')],
+                          'store'), n.Name('iterable', 'load'), [
+                n.Output([n.Name('item', 'load'), n.Const(';'),
+                          n.Name('whoop', 'load')])
+            ], None)
+        ])
+
+        self.assert_result_matches(template, dict(iterable=[(1,)]),
+            '1;<whoop>', config=config)
+
 
 def suite():
     import unittest
