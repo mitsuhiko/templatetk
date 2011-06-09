@@ -178,7 +178,7 @@ class ExpressionTestCase(InterpreterTestCase):
         rv = intrptr.evaluate(node, state)
         self.assert_equal(rv, expected)
 
-    def test_basic_arithmetic(self):
+    def test_basic_binary_arithmetic(self):
         n = nodes
         test = self.assert_expression_equals
 
@@ -187,6 +187,30 @@ class ExpressionTestCase(InterpreterTestCase):
         test(n.Sub(n.Const(42), n.Const(19)), 23)
         test(n.Mul(n.Const(2), n.Name('var', 'load')), 6, ctx=dict(var=3))
         test(n.Mul(n.Const('test'), n.Const(3)), 'testtesttest')
+        test(n.Div(n.Const(42), n.Const(2)), 21.0)
+        test(n.Div(n.Const(42), n.Const(4)), 10.5)
+        test(n.FloorDiv(n.Const(42), n.Const(4)), 10)
+        test(n.Mod(n.Const(42), n.Const(4)), 2)
+        test(n.Pow(n.Const(2), n.Const(4)), 16)
+
+    def test_basic_binary_logicals(self):
+        n = nodes
+        test = self.assert_expression_equals
+        not_called_buffer = []
+
+        def simplecall(func):
+            return n.Call(n.Name(func, 'load'), [], [], None, None)
+
+        def not_called():
+            not_called_buffer.append(42)
+
+        test(n.And(n.Const(42), n.Const(23)), 23)
+        test(n.And(n.Const(0), n.Const(23)), False)
+        test(n.Or(n.Const(42), n.Const(23)), 42)
+        test(n.Or(n.Const(0), n.Const(23)), 23)
+        test(n.And(n.Const(0), simplecall(not_called)), False)
+        test(n.Or(n.Const(42), simplecall(not_called)), 42)
+        self.assert_equal(not_called_buffer, [])
 
 
 def suite():

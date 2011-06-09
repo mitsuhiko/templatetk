@@ -207,4 +207,20 @@ class Interpreter(NodeVisitor):
     visit_Add = binexpr(operator.add)
     visit_Sub = binexpr(operator.sub)
     visit_Mul = binexpr(operator.mul)
+    visit_Div = binexpr(operator.truediv)
+    visit_FloorDiv = binexpr(operator.floordiv)
+    visit_Mod = binexpr(operator.mod)
+    visit_Pow = binexpr(operator.pow)
     del binexpr
+
+    def visit_And(self, node, state):
+        rv = self.visit(node.left, state)
+        if not rv:
+            return False
+        return self.visit(node.right, state)
+
+    def visit_Or(self, node, state):
+        rv = self.visit(node.left, state)
+        if rv:
+            return rv
+        return self.visit(node.right, state)
