@@ -352,6 +352,17 @@ class ExpressionTestCase(InterpreterTestCase):
 
         self.assert_equal(not_called_buffer, [])
 
+    def test_call(self):
+        n = nodes
+        test = self.assert_expression_equals
+
+        def foo(a, b, c, d):
+            return a, b, c, d
+
+        test(n.Call(n.Name('foo', 'load'), [n.Const(1)],
+             [n.Keyword('c', n.Const(3))], n.Const((2,)),
+             n.Const({'d': 4})), (1, 2, 3, 4), ctx=dict(foo=foo))
+
 
 def suite():
     import unittest
