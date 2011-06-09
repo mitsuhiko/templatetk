@@ -224,6 +224,21 @@ class ForLoopTestCase(InterpreterTestCase):
 
         self.assert_result_matches(template, dict(), '42;23;42;')
 
+    def visit_ExprStmt(self):
+        n = nodes
+        called = []
+
+        def testfunc():
+            called.append(23)
+
+        template = n.Template([
+            n.ExprStmt(n.Call(n.Name('test', 'load'), [], [], None, None)),
+            n.Output([n.Const('42')])
+        ])
+
+        self.assert_result_matches(template, dict(test=testfunc), '42')
+        self.assert_equal(called, [23])
+
 
 class ExpressionTestCase(InterpreterTestCase):
 

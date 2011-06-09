@@ -346,3 +346,6 @@ class Interpreter(NodeVisitor):
                 yield event
         finally:
             state.pop_frame()
+
+    def visit_ExprStmt(self, node, state):
+        self.visit(node.node, state)
