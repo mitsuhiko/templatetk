@@ -24,6 +24,19 @@ class ForLoopTestCase(TemplateTestCase):
         rv = u''.join(intrptr.evaluate(node, state))
         self.assert_equal(rv, expected)
 
+    def assert_template_fails(self, node, ctx, exception, config=None):
+        if config is None:
+            config = Config()
+        intrptr = Interpreter(config)
+        state = BasicInterpreterState(intrptr.config, ctx)
+        try:
+            for item in intrptr.evaluate(node, state):
+                pass
+        except Exception, e:
+            self.assertEqual(type(e), exception)
+        else:
+            self.fail('Expected exception of type %r' % exception.__name__)
+
     def test_basic_loop(self):
         n = nodes
         template = n.Template([
@@ -90,6 +103,21 @@ class ForLoopTestCase(TemplateTestCase):
         self.assert_result_matches(template, dict(
             iterable=[1, 2, 3, 4]
         ), '<item>;<item>;<item>;<item>;', config=config)
+
+    def test_loud_loop_unpacking(self):
+        config = Config()
+        config.allow_noniter_unpacking = False
+
+        n = nodes
+        template = n.Template([
+            n.For(n.Tuple([n.Name('item', 'store'), n.Name('whoop', 'store')],
+                          'store'), n.Name('iterable', 'load'), [
+                n.Output([n.Name('item', 'load'), n.Const(';')])
+            ], None)
+        ])
+
+        self.assert_template_fails(template, dict(iterable=[1, 2, 3]),
+                                   exception=TypeError, config=config)
 
 
 def suite():
