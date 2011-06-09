@@ -47,6 +47,9 @@ class Config(object):
             except (TypeError, LookupError):
                 return Undefined()
 
+    def getitem(self, object, attribute):
+        return self.getattr(object, attribute)
+
     def to_unicode(self, obj):
         return unicode(obj)
 
@@ -63,9 +66,6 @@ class Config(object):
     def is_eval_context_function(self, obj):
         return isinstance(obj, _context_function_types) and \
                getattr(obj, 'evalcontextfunction', False)
-
-    def getitem(self, object, attribute):
-        return self.getattr(object, attribute)
 
     def get_filters(self):
         return {}

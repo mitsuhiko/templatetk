@@ -222,6 +222,25 @@ class ExpressionTestCase(InterpreterTestCase):
         test(n.Not(n.Const(0)), True)
         test(n.Not(n.Const(42)), False)
 
+    def test_general_expressions(self):
+        n = nodes
+        test = self.assert_expression_equals
+
+        weird_getattr_config = Config()
+        weird_getattr_config.getattr = lambda obj, attr: (obj, attr, 'attr')
+        weird_getattr_config.getitem = lambda obj, item: (obj, item, 'item')
+
+        test(n.Const(42), 42)
+        test(n.Const("test"), "test")
+        test(n.Getattr(n.Const('something'),
+                       n.Const('the_attribute'), 'load'),
+             ('something', 'the_attribute', 'attr'),
+             config=weird_getattr_config)
+        test(n.Getitem(n.Const('something'),
+                       n.Const('the_attribute'), 'load'),
+             ('something', 'the_attribute', 'item'),
+             config=weird_getattr_config)
+
 
 def suite():
     import unittest

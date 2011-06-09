@@ -172,8 +172,8 @@ class Interpreter(NodeVisitor):
 
     def visit_Getitem(self, node, state):
         obj = self.visit(node.node, state)
-        attr = self.visit(node.attr, state)
-        return self.config.getattr(obj, attr)
+        attr = self.visit(node.arg, state)
+        return self.config.getitem(obj, attr)
 
     def visit_Call(self, node, state):
         obj = self.visit(node.node, state)
