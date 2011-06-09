@@ -50,26 +50,6 @@ class Impossible(Exception):
     """Raised if the node could not perform a requested action."""
 
 
-class EvalContext(object):
-    """Holds evaluation time information.  Custom attributes can be attached
-    to it in extensions.
-    """
-
-    def __init__(self, config, template_name=None):
-        self.config = config
-        self.autoescape = config.get_autoescape_default(template_name)
-        self.volatile = False
-        self.filters = config.get_filters()
-        self.tests = config.get_tests()
-
-    def save(self):
-        return self.__dict__.copy()
-
-    def revert(self, old):
-        self.__dict__.clear()
-        self.__dict__.update(old)
-
-
 class NodeType(type):
     """A metaclass for nodes that handles the field and attribute
     inheritance.  fields and attributes from the parent class are
@@ -604,25 +584,6 @@ class Break(Stmt):
 
 class Scope(Stmt):
     """An artificial scope."""
-    fields = ('body',)
-
-
-class EvalContextModifier(Stmt):
-    """Modifies the eval context.  For each option that should be modified,
-    a :class:`Keyword` has to be added to the :attr:`options` list.
-
-    Example to change the `autoescape` setting::
-
-        EvalContextModifier(options=[Keyword('autoescape', Const(True))])
-    """
-    fields = ('options',)
-
-
-class ScopedEvalContextModifier(EvalContextModifier):
-    """Modifies the eval context and reverts it later.  Works exactly like
-    :class:`EvalContextModifier` but will only modify the
-    :class:`~jinja2.nodes.EvalContext` for nodes in the :attr:`body`.
-    """
     fields = ('body',)
 
 

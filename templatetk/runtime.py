@@ -17,11 +17,20 @@ class RuntimeInfo(object):
     dependent.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, template_name=None):
         self.config = config
+        self.autoescape = config.get_autoescape_default(template_name)
+        self.volatile = False
         self.filters = config.get_filters()
         self.tests = config.get_tests()
         self.block_executers = {}
+
+    def save(self):
+        return self.__dict__.copy()
+
+    def revert(self, old):
+        self.__dict__.clear()
+        self.__dict__.update(old)
 
     def get_filter(self, name):
         try:

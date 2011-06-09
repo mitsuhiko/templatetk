@@ -50,6 +50,9 @@ class TemplateTestCase(unittest.TestCase):
     def assert_equal(self, a, b):
         return self.assertEqual(a, b)
 
+    def assert_not_equal(self, a, b):
+        return self.assertNotEqual(a, b)
+
     def assert_raises(self, exception_class):
         return _ExceptionCatcher(self, exception_class)
 

@@ -329,3 +329,12 @@ class Interpreter(NodeVisitor):
         return slice(self.visit(node.start, state),
                      self.visit(node.stop, state),
                      self.visit(node.step, state))
+
+    def visit_MarkSafe(self, node, state):
+        return state.config.markup_type(self.visit(node.expr, state))
+
+    def visit_MarkSafeIfAutoescape(self, node, state):
+        value = self.visit(node.expr, state)
+        if state.info.autoescape:
+            value = state.config.markup_type(self.visit(node.expr, state))
+        return value

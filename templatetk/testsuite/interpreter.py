@@ -403,6 +403,29 @@ class ExpressionTestCase(InterpreterTestCase):
         test(n.Getitem(n.Const('Hello'), n.Slice(n.Const(None), n.Const(-1),
                                                  n.Const(None)), 'load'), 'Hell')
 
+    def test_mark_safe(self):
+        n = nodes
+        cfg = Config()
+
+        rv = self.evaluate(n.MarkSafe(n.Const('<Hello World!>')), config=cfg)
+        self.assert_equal(type(rv), cfg.markup_type)
+        self.assert_equal(unicode(rv), '<Hello World!>')
+
+    def test_mark_safe_if_autoescape(self):
+        n = nodes
+
+        cfg = Config()
+        cfg.get_autoescape_default = lambda x: False
+        rv = self.evaluate(n.MarkSafeIfAutoescape(n.Const('<Hello World!>')), config=cfg)
+        self.assert_not_equal(type(rv), unicode)
+        self.assert_equal(unicode(rv), '<Hello World!>')
+
+        cfg = Config()
+        cfg.get_autoescape_default = lambda x: True
+        rv = self.evaluate(n.MarkSafeIfAutoescape(n.Const('<Hello World!>')), config=cfg)
+        self.assert_equal(type(rv), cfg.markup_type)
+        self.assert_equal(unicode(rv), '<Hello World!>')
+
 
 def suite():
     import unittest

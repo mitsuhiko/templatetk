@@ -29,6 +29,19 @@ The following differences in semantics might cause a problem:
     transition to undefined objects possible?  More importantly: are
     undefines necessary on the compiler level?
 
+Jinja2 Long-Term Todo List that Might Be Worth Considering
+----------------------------------------------------------
+
+-   A while ago there was a proposal for Jinja2 to have different escaping
+    schemes for different templates.  Right now in Jinja2 you either have
+    or don't have autoescaping enabled, but autoescaping always means
+    escaping according to the HTML/XML/SGML rules.  It would be nice to be
+    able to switch the escaping scheme based on what template you're
+    operating on.  (LaTeX, reStructuredText, etc.).
+
+    We could in theory come closer to that goal by moving the markup_type
+    from the compiler config to the state.  Reasonable?
+
 Django Performance Limitations
 ------------------------------
 
