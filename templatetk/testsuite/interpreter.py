@@ -209,6 +209,21 @@ class ForLoopTestCase(InterpreterTestCase):
 
         self.assert_result_matches(template, dict(), '1;3;')
 
+    def test_artifical_scope(self):
+        n = nodes
+
+        template = n.Template([
+            n.Assign(n.Name('testing', 'store'), n.Const(42)),
+            n.Output([n.Name('testing', 'load'), n.Const(';')]),
+            n.Scope([
+                n.Assign(n.Name('testing', 'store'), n.Const(23)),
+                n.Output([n.Name('testing', 'load'), n.Const(';')])
+            ]),
+            n.Output([n.Name('testing', 'load'), n.Const(';')])
+        ])
+
+        self.assert_result_matches(template, dict(), '42;23;42;')
+
 
 class ExpressionTestCase(InterpreterTestCase):
 

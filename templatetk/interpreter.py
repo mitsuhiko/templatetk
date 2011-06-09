@@ -338,3 +338,11 @@ class Interpreter(NodeVisitor):
         if state.info.autoescape:
             value = state.config.markup_type(self.visit(node.expr, state))
         return value
+
+    def visit_Scope(self, node, state):
+        state.push_frame()
+        try:
+            for event in self.visit_block(node.body, state):
+                yield event
+        finally:
+            state.pop_frame()
