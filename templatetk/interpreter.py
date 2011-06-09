@@ -15,6 +15,9 @@ from templatetk.nodeutils import NodeVisitor
 from templatetk import nodes
 
 
+empty_iter = iter(())
+
+
 def _assign_name(node, value, state):
     state.assign_var(node.name, value)
 
@@ -112,7 +115,9 @@ class Interpreter(NodeVisitor):
     def visit_block(self, nodes, state):
         if nodes:
             for node in nodes:
-                for event in self.visit(node, state):
+                rv = self.visit(node, state)
+                assert rv is not None, 'visitor for %r failed' % node
+                for event in rv:
                     yield event
 
     def visit_Template(self, node, state):
@@ -160,6 +165,12 @@ class Interpreter(NodeVisitor):
         for event in eventiter:
             yield event
         state.pop_frame()
+
+    def visit_Assign(self, node, state):
+        assert node.target.ctx == 'store'
+        value = self.visit(node.node, state)
+        assign_to_state(node.target, value, state)
+        return empty_iter
 
     def visit_Name(self, node, state):
         assert node.ctx == 'load', 'visiting store nodes does not make sense'

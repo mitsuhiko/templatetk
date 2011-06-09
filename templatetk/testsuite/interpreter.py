@@ -38,6 +38,30 @@ class InterpreterTestCase(TemplateTestCase):
             self.fail('Expected exception of type %r' % exception.__name__)
 
 
+class IfConditionTestCase(InterpreterTestCase):
+
+    def test_basic_if(self):
+        n = nodes
+
+        template = n.Template([
+            n.If(n.Name('value', 'load'), [n.Const('body')],
+                 [n.Const('else')])])
+
+        self.assert_result_matches(template, dict(value=True), 'body')
+        self.assert_result_matches(template, dict(value=False), 'else')
+
+    def test_if_scoping(self):
+        n = nodes
+
+        template = n.Template([
+            n.Output([n.Name('a', 'load'), n.Const(';')]),
+            n.If(n.Const(True), [n.Assign(n.Name('a', 'store'), n.Const(23)),
+                                 n.Output([n.Name('a', 'load')])], []),
+            n.Output([n.Const(';'), n.Name('a', 'load')])])
+
+        self.assert_result_matches(template, dict(a=42), '42;23;42')
+
+
 class ForLoopTestCase(InterpreterTestCase):
 
     def test_basic_loop(self):
@@ -245,6 +269,7 @@ class ExpressionTestCase(InterpreterTestCase):
 def suite():
     import unittest
     suite = unittest.TestSuite()
+    suite.addTest(unittest.makeSuite(IfConditionTestCase))
     suite.addTest(unittest.makeSuite(ForLoopTestCase))
     suite.addTest(unittest.makeSuite(ExpressionTestCase))
     return suite
