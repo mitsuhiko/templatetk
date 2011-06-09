@@ -165,9 +165,6 @@ class Interpreter(NodeVisitor):
         for node in node.nodes:
             yield self.config.to_unicode(self.visit(node, state))
 
-    def visit_Extends(self, node, state):
-        raise NotImplementedError('add me, add me')
-
     def visit_For(self, node, state):
         parent = None
         if self.config.forloop_parent_access:
@@ -349,3 +346,21 @@ class Interpreter(NodeVisitor):
 
     def visit_ExprStmt(self, node, state):
         self.visit(node.node, state)
+
+    def visit_Block(self, node, state):
+        raise NotImplementedError()
+
+    def visit_Extends(self, node, state):
+        raise NotImplementedError()
+
+    def visit_FilterBlock(self, node, state):
+        raise NotImplementedError()
+
+    def visit_Include(self, node, state):
+        raise NotImplementedError()
+
+    def visit_Import(self, node, state):
+        raise NotImplementedError()
+
+    def visit_FromImport(self, node, state):
+        raise NotImplementedError()
