@@ -8,6 +8,7 @@
     :copyright: (c) Copyright 2011 by Armin Ronacher.
     :license: BSD, see LICENSE for more details.
 """
+import operator
 from itertools import izip, chain
 
 from templatetk.nodeutils import NodeVisitor
@@ -169,6 +170,11 @@ class Interpreter(NodeVisitor):
         attr = self.visit(node.attr, state)
         return self.config.getattr(obj, attr)
 
+    def visit_Getitem(self, node, state):
+        obj = self.visit(node.node, state)
+        attr = self.visit(node.attr, state)
+        return self.config.getattr(obj, attr)
+
     def visit_Call(self, node, state):
         obj = self.visit(node.node, state)
         args = [self.visit(arg, state) for arg in node.args]
@@ -190,3 +196,15 @@ class Interpreter(NodeVisitor):
 
     def visit_Const(self, node, state):
         return node.value
+
+    def binexpr(functor):
+        def visitor(self, node, state):
+            a = self.visit(node.left, state)
+            b = self.visit(node.right, state)
+            return functor(a, b)
+        return visitor
+
+    visit_Add = binexpr(operator.add)
+    visit_Sub = binexpr(operator.sub)
+    visit_Mul = binexpr(operator.mul)
+    del binexpr
