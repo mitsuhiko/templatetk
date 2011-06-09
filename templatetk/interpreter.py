@@ -236,6 +236,27 @@ class Interpreter(NodeVisitor):
     def visit_Const(self, node, state):
         return node.value
 
+    def visit_TemplateData(self, node, state):
+        return state.config.markup_type(node.data)
+
+    def visit_Tuple(self, node, state):
+        assert node.ctx == 'load'
+        return tuple(self.visit(x, state) for x in node.items)
+
+    def visit_List(self, node, state):
+        return list(self.visit(x, state) for x in node.items)
+
+    def visit_Dict(self, node, state):
+        return dict(self.visit(x, state) for x in node.items)
+
+    def visit_Pair(self, node, state):
+        return self.visit(node.key, state), self.visit(node.value, state)
+
+    def visit_CondExpr(self, node, state):
+        if self.visit(node.test, state):
+            return self.visit(node.true)
+        return self.visit(node.false)
+
     def binexpr(node_class):
         functor = nodes.binop_to_func[node_class.operator]
         def visitor(self, node, state):

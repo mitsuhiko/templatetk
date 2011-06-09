@@ -43,6 +43,9 @@ cmpop_to_func = {
 }
 
 
+nodes_by_name = {}
+
+
 class Impossible(Exception):
     """Raised if the node could not perform a requested action."""
 
@@ -85,7 +88,10 @@ class NodeType(type):
             newslots.extend(names)
         d.setdefault('abstract', False)
         d['__slots__'] = newslots
-        return type.__new__(cls, name, bases, d)
+        rv = type.__new__(cls, name, bases, d)
+        assert name not in nodes_by_name, 'Node naming conflict %r' % name
+        nodes_by_name[name] = rv
+        return rv
 
 
 class Node(object):
@@ -374,17 +380,6 @@ class Const(Literal):
     """
     fields = ('value',)
 
-    @classmethod
-    def from_untrusted(cls, value, lineno=None, config=None):
-        """Return a const object if the value is representable as
-        constant value in the generated code, otherwise it will raise
-        an `Impossible` exception.
-        """
-        from compiler import has_safe_repr
-        if not has_safe_repr(value):
-            raise Impossible()
-        return cls(value, lineno=lineno, config=config)
-
 
 class TemplateData(Literal):
     """A constant template string."""
@@ -433,7 +428,7 @@ class CondExpr(Expr):
     """A conditional expression (inline if expression).  (``{{
     foo if bar else baz }}``)
     """
-    fields = ('test', 'expr1', 'expr2')
+    fields = ('test', 'true', 'false')
 
 
 class Filter(Expr):

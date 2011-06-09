@@ -9,6 +9,7 @@
     :license: BSD, see LICENSE for more details.
 """
 from templatetk.testsuite import TemplateTestCase
+
 from templatetk import nodes
 from templatetk.interpreter import Interpreter, BasicInterpreterState
 from templatetk.config import Config
@@ -16,21 +17,22 @@ from templatetk.config import Config
 
 class InterpreterTestCase(TemplateTestCase):
 
-    def assert_result_matches(self, node, ctx, expected, config=None):
+    def evaluate(self, node, ctx=None, config=None):
         if config is None:
             config = Config()
+        if ctx is None:
+            ctx = {}
         intrptr = Interpreter(config)
         state = BasicInterpreterState(intrptr.config, ctx)
-        rv = u''.join(intrptr.evaluate(node, state))
+        return intrptr.evaluate(node, state)
+
+    def assert_result_matches(self, node, ctx, expected, config=None):
+        rv = ''.join(self.evaluate(node, ctx, config))
         self.assert_equal(rv, expected)
 
     def assert_template_fails(self, node, ctx, exception, config=None):
-        if config is None:
-            config = Config()
-        intrptr = Interpreter(config)
-        state = BasicInterpreterState(intrptr.config, ctx)
         try:
-            for item in intrptr.evaluate(node, state):
+            for item in self.evaluate(node, ctx, config):
                 pass
         except Exception, e:
             self.assert_equal(type(e), exception)
@@ -313,6 +315,26 @@ class ExpressionTestCase(InterpreterTestCase):
         test(n.Compare(n.Const('testing'), [
             n.Operand('notin', n.Const('test'))
         ]), True)
+
+    def test_template_literal(self):
+        n = nodes
+        cfg = Config()
+
+        rv = self.evaluate(n.TemplateData('Hello World!'), config=cfg)
+        self.assert_equal(type(rv), cfg.markup_type)
+        self.assert_equal(unicode(rv), 'Hello World!')
+
+    def test_complex_literals(self):
+        n = nodes
+
+        test = self.assert_expression_equals
+        test(n.Tuple([n.Const(1), n.Name('test', 'load')], 'load'), (1, 2),
+             ctx=dict(test=2))
+        test(n.List([n.Const(1), n.Name('test', 'load')]), [1, 2],
+             ctx=dict(test=2))
+        test(n.Dict([n.Pair(n.Const('foo'), n.Const('bar')),
+                     n.Pair(n.Const('baz'), n.Const('blah'))]),
+             dict(foo='bar', baz='blah'))
 
 
 def suite():
