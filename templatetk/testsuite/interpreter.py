@@ -326,8 +326,8 @@ class ExpressionTestCase(InterpreterTestCase):
 
     def test_complex_literals(self):
         n = nodes
-
         test = self.assert_expression_equals
+
         test(n.Tuple([n.Const(1), n.Name('test', 'load')], 'load'), (1, 2),
              ctx=dict(test=2))
         test(n.List([n.Const(1), n.Name('test', 'load')]), [1, 2],
@@ -335,6 +335,22 @@ class ExpressionTestCase(InterpreterTestCase):
         test(n.Dict([n.Pair(n.Const('foo'), n.Const('bar')),
                      n.Pair(n.Const('baz'), n.Const('blah'))]),
              dict(foo='bar', baz='blah'))
+
+    def test_condexpr(self):
+        n = nodes
+        test = self.assert_expression_equals
+        not_called_buffer = []
+
+        def simplecall(func):
+            return n.Call(n.Name(func, 'load'), [], [], None, None)
+
+        def not_called():
+            not_called_buffer.append(42)
+
+        test(n.CondExpr(n.Const(1), n.Const(42), simplecall(not_called)), 42)
+        test(n.CondExpr(n.Const(0), simplecall(not_called), n.Const(23)), 23)
+
+        self.assert_equal(not_called_buffer, [])
 
 
 def suite():

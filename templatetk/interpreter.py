@@ -254,8 +254,8 @@ class Interpreter(NodeVisitor):
 
     def visit_CondExpr(self, node, state):
         if self.visit(node.test, state):
-            return self.visit(node.true)
-        return self.visit(node.false)
+            return self.visit(node.true, state)
+        return self.visit(node.false, state)
 
     def binexpr(node_class):
         functor = nodes.binop_to_func[node_class.operator]
