@@ -15,7 +15,7 @@ from itertools import izip
 from collections import deque
 
 
-_binop_to_func = {
+binop_to_func = {
     '*':        operator.mul,
     '/':        operator.truediv,
     '//':       operator.floordiv,
@@ -25,13 +25,13 @@ _binop_to_func = {
     '-':        operator.sub
 }
 
-_uaop_to_func = {
+uaop_to_func = {
     'not':      operator.not_,
     '+':        operator.pos,
     '-':        operator.neg
 }
 
-_cmpop_to_func = {
+cmpop_to_func = {
     'eq':       operator.eq,
     'ne':       operator.ne,
     'gt':       operator.gt,
@@ -117,10 +117,11 @@ class Node(object):
                 if not self.fields:
                     raise TypeError('%r takes 0 arguments' %
                                     self.__class__.__name__)
-                raise TypeError('%r takes 0 or %d argument%s' % (
+                raise TypeError('%r takes 0 or %d argument%s, got %d' % (
                     self.__class__.__name__,
                     len(self.fields),
-                    len(self.fields) != 1 and 's' or ''
+                    len(self.fields) != 1 and 's' or '',
+                    len(fields)
                 ))
             for name, arg in izip(self.fields, fields):
                 setattr(self, name, arg)
@@ -507,8 +508,8 @@ class Operand(Helper):
 
 if __debug__:
     Operand.__doc__ += '\nThe following operators are available: ' + \
-        ', '.join(sorted('``%s``' % x for x in set(_binop_to_func) |
-                  set(_uaop_to_func) | set(_cmpop_to_func)))
+        ', '.join(sorted('``%s``' % x for x in set(binop_to_func) |
+                  set(uaop_to_func) | set(cmpop_to_func)))
 
 
 class Mul(BinExpr):

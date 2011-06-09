@@ -12,6 +12,7 @@
 from types import MethodType, FunctionType
 
 from templatetk.runtime import LoopContext
+from templatetk.utils import Markup
 
 
 #: the types we support for context functions
@@ -26,13 +27,13 @@ class Undefined(object):
 class Config(object):
 
     def __init__(self):
-        self.sandboxed = False
         self.intercepted_binops = frozenset()
         self.intercepted_unops = frozenset()
         self.forloop_accessor = 'loop'
         self.forloop_parent_access = False
         self.strict_tuple_unpacking = False
         self.allow_noniter_unpacking = False
+        self.markup_type = Markup
 
     def get_autoescape_default(self, template_name):
         return False

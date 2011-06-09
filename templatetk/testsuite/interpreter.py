@@ -189,6 +189,28 @@ class ForLoopTestCase(InterpreterTestCase):
         self.assert_result_matches(template, dict(iterable=[(1,)]),
             '1;<whoop>', config=config)
 
+    def test_loop_controls(self):
+        n = nodes
+        template = n.Template([
+            n.For(n.Name('item', 'store'), n.Const([1, 2, 3]), [
+                n.Output([n.Name('item', 'load'), n.Const(';')]),
+                n.If(n.Compare(n.Getattr(n.Name('loop', 'load'),
+                                         n.Const('index0'), 'load'),
+                               [n.Operand('eq', n.Const(1))]), [n.Break()], [])
+            ], [])])
+
+        self.assert_result_matches(template, dict(), '1;2;')
+
+        template = n.Template([
+            n.For(n.Name('item', 'store'), n.Const([1, 2, 3]), [
+                n.If(n.Compare(n.Getattr(n.Name('loop', 'load'),
+                                         n.Const('index0'), 'load'),
+                               [n.Operand('eq', n.Const(1))]), [n.Continue()], []),
+                n.Output([n.Name('item', 'load'), n.Const(';')])
+            ], [])])
+
+        self.assert_result_matches(template, dict(), '1;3;')
+
 
 class ExpressionTestCase(InterpreterTestCase):
 
@@ -264,6 +286,33 @@ class ExpressionTestCase(InterpreterTestCase):
                        n.Const('the_attribute'), 'load'),
              ('something', 'the_attribute', 'item'),
              config=weird_getattr_config)
+
+    def test_compare_expressions(self):
+        n = nodes
+        test = self.assert_expression_equals
+
+        test(n.Compare(n.Const(1), [
+            n.Operand('lt', n.Const(2)),
+            n.Operand('lt', n.Const(3))
+        ]), True)
+
+        test(n.Compare(n.Const(1), [
+            n.Operand('lt', n.Const(32)),
+            n.Operand('lt', n.Const(3))
+        ]), False)
+
+        test(n.Compare(n.Const(42), [
+            n.Operand('gt', n.Const(32)),
+            n.Operand('lt', n.Const(100))
+        ]), True)
+
+        test(n.Compare(n.Const('test'), [
+            n.Operand('in', n.Const('testing'))
+        ]), True)
+
+        test(n.Compare(n.Const('testing'), [
+            n.Operand('notin', n.Const('test'))
+        ]), True)
 
 
 def suite():

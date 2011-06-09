@@ -18,6 +18,18 @@ from templatetk import nodes
 empty_iter = iter(())
 
 
+class InterpreterInternalException(BaseException):
+    pass
+
+
+class ContinueLoop(InterpreterInternalException):
+    pass
+
+
+class BreakLoop(InterpreterInternalException):
+    pass
+
+
 def _assign_name(node, value, state):
     state.assign_var(node.name, value)
 
@@ -102,7 +114,12 @@ class Interpreter(NodeVisitor):
 
     def evaluate(self, node, state):
         assert state.config is self.config, 'config mismatch'
-        return self.visit(node, state)
+        try:
+            return self.visit(node, state)
+        except InterpreterInternalException, e:
+            raise AssertionError('An interpreter internal exception '
+                                 'was raised.  ASTS might be invalid. '
+                                 'Got (%r)' % e)
 
     def assign_to_state(self, state, node, item):
         assert node.can_assign(), 'tried to assign to %r' % item
@@ -140,11 +157,16 @@ class Interpreter(NodeVisitor):
         state.push_frame()
         iterated = False
         for item, loop_state in self.config.wrap_loop(iterator, parent):
-            iterated = True
-            state.assign_var(self.config.forloop_accessor, loop_state)
-            assign_to_state(node.target, item, state)
-            for event in self.visit_block(node.body, state):
-                yield event
+            try:
+                iterated = True
+                state.assign_var(self.config.forloop_accessor, loop_state)
+                assign_to_state(node.target, item, state)
+                for event in self.visit_block(node.body, state):
+                    yield event
+            except ContinueLoop:
+                continue
+            except BreakLoop:
+                break
         state.pop_frame()
 
         if not iterated and node.else_ is not None:
@@ -152,6 +174,12 @@ class Interpreter(NodeVisitor):
             for event in self.visit_block(node.else_, state):
                 yield event
             state.pop_frame()
+
+    def visit_Continue(self, node, state):
+        raise ContinueLoop()
+
+    def visit_Break(self, node, state):
+        raise BreakLoop()
 
     def visit_If(self, node, state):
         test = self.visit(node.test, state)
@@ -208,20 +236,21 @@ class Interpreter(NodeVisitor):
     def visit_Const(self, node, state):
         return node.value
 
-    def binexpr(functor):
+    def binexpr(node_class):
+        functor = nodes.binop_to_func[node_class.operator]
         def visitor(self, node, state):
             a = self.visit(node.left, state)
             b = self.visit(node.right, state)
             return functor(a, b)
         return visitor
 
-    visit_Add = binexpr(operator.add)
-    visit_Sub = binexpr(operator.sub)
-    visit_Mul = binexpr(operator.mul)
-    visit_Div = binexpr(operator.truediv)
-    visit_FloorDiv = binexpr(operator.floordiv)
-    visit_Mod = binexpr(operator.mod)
-    visit_Pow = binexpr(operator.pow)
+    visit_Add = binexpr(nodes.Add)
+    visit_Sub = binexpr(nodes.Sub)
+    visit_Mul = binexpr(nodes.Mul)
+    visit_Div = binexpr(nodes.Div)
+    visit_FloorDiv = binexpr(nodes.FloorDiv)
+    visit_Mod = binexpr(nodes.Mod)
+    visit_Pow = binexpr(nodes.Pow)
     del binexpr
 
     def visit_And(self, node, state):
@@ -236,11 +265,22 @@ class Interpreter(NodeVisitor):
             return rv
         return self.visit(node.right, state)
 
-    def unary(functor):
+    def unary(node_class):
+        functor = nodes.uaop_to_func[node_class.operator]
         def visitor(self, node, state):
             return functor(self.visit(node.node, state))
         return visitor
 
-    visit_Pos = unary(operator.pos)
-    visit_Neg = unary(operator.neg)
-    visit_Not = unary(operator.not_)
+    visit_Pos = unary(nodes.Pos)
+    visit_Neg = unary(nodes.Neg)
+    visit_Not = unary(nodes.Not)
+    del unary
+
+    def visit_Compare(self, node, state):
+        left = self.visit(node.expr, state)
+        for op in node.ops:
+            right = self.visit(op.expr, state)
+            if not nodes.cmpop_to_func[op.op](left, right):
+                return False
+            left = right
+        return True
