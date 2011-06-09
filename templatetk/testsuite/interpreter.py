@@ -396,6 +396,13 @@ class ExpressionTestCase(InterpreterTestCase):
         test(n.Test(n.Const('HELLO'), 'uppercase', [], [], None, None),
              True, config=config)
 
+    def test_slicing(self):
+        n = nodes
+        test = self.assert_expression_equals
+
+        test(n.Getitem(n.Const('Hello'), n.Slice(n.Const(1), n.Const(None),
+                                                 n.Const(2)), 'load'), 'el')
+
 
 def suite():
     import unittest

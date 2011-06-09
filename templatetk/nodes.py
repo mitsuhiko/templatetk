@@ -478,7 +478,7 @@ class Getattr(Expr):
 
 class Slice(Expr):
     """Represents a slice object.  This must only be used as argument for
-    :class:`Subscript`.
+    :class:`Getitem`.
     """
     fields = ('start', 'stop', 'step')
 

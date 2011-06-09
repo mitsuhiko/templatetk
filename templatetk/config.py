@@ -38,18 +38,23 @@ class Config(object):
     def get_autoescape_default(self, template_name):
         return False
 
-    def getattr(self, object, attribute):
+    def getattr(self, obj, attribute):
         # XXX: better defaults maybe
         try:
-            return getattr(object, str(attribute))
+            return getattr(obj, str(attribute))
         except (UnicodeError, AttributeError):
             try:
-                return object[attribute]
+                return obj[attribute]
             except (TypeError, LookupError):
                 return Undefined()
 
-    def getitem(self, object, attribute):
-        return self.getattr(object, attribute)
+    def getitem(self, obj, attribute):
+        if isinstance(attribute, slice):
+            # needed to support the legacy interface of the subscript op
+            if attribute.step is None:
+                return obj[attribute.start:attribute.end]
+            return obj[attribute]
+        return self.getattr(obj, attribute)
 
     def to_unicode(self, obj):
         return unicode(obj)

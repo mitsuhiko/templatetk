@@ -324,3 +324,8 @@ class Interpreter(NodeVisitor):
         value = self.visit(node.node, state)
         args, kwargs = self.resolve_call_args(node, state)
         return state.info.call_test(node.name, value, args, kwargs)
+
+    def visit_Slice(self, node, state):
+        return slice(self.visit(node.start, state),
+                     self.visit(node.stop, state),
+                     self.visit(node.step, state))
