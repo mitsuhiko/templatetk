@@ -386,6 +386,16 @@ class ExpressionTestCase(InterpreterTestCase):
         test(n.Filter(n.Const('hello'), 'uppercase', [], [], None, None),
              'HELLO', config=config)
 
+    def test_tests(self):
+        n = nodes
+        test = self.assert_expression_equals
+
+        config = Config()
+        config.get_tests = lambda: {'uppercase': lambda x: x.isupper()}
+
+        test(n.Test(n.Const('HELLO'), 'uppercase', [], [], None, None),
+             True, config=config)
+
 
 def suite():
     import unittest

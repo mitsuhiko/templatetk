@@ -23,11 +23,24 @@ class RuntimeInfo(object):
         self.tests = config.get_tests()
         self.block_executers = {}
 
-    def call_filter(self, name, obj, args, kwargs):
+    def get_filter(self, name):
         try:
-            func = self.filters[name]
+            return self.filters[name]
         except KeyError:
             raise RuntimeError('Filter %r not found' % name)
+
+    def get_test(self, name):
+        try:
+            return self.tests[name]
+        except KeyError:
+            raise RuntimeError('Test %r not found' % name)
+
+    def call_filter(self, name, obj, args, kwargs):
+        func = self.get_filter(name)
+        return func(obj, *args, **kwargs)
+
+    def call_test(self, name, obj, args, kwargs):
+        func = self.get_test(name)
         return func(obj, *args, **kwargs)
 
 

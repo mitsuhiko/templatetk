@@ -66,7 +66,10 @@ class InterpreterState(object):
 
     def __init__(self, config):
         self.config = config
-        self.info = self.runtime_info_class(config)
+        self.info = self.make_runtime_info()
+
+    def make_runtime_info(self):
+        return self.runtime_info_class(self.config)
 
     def push_frame(self):
         pass
@@ -316,3 +319,8 @@ class Interpreter(NodeVisitor):
         value = self.visit(node.node, state)
         args, kwargs = self.resolve_call_args(node, state)
         return state.info.call_filter(node.name, value, args, kwargs)
+
+    def visit_Test(self, node, state):
+        value = self.visit(node.node, state)
+        args, kwargs = self.resolve_call_args(node, state)
+        return state.info.call_test(node.name, value, args, kwargs)
