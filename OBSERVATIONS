@@ -24,6 +24,11 @@ The following differences in semantics might cause a problem:
     generally also what Jinja2 is aiming for, so for as long as imports
     are not used in Django there should not be a problem.
 
+-   Django resolves unknown variables to TEMPLATE_STRING_IF_INVALID which
+    can be a format string with ``%s`` for the variable name.  Is a
+    transition to undefined objects possible?  More importantly: are
+    undefines necessary on the compiler level?
+
 Django Performance Limitations
 ------------------------------
 
