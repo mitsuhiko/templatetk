@@ -363,6 +363,19 @@ class ExpressionTestCase(InterpreterTestCase):
              [n.Keyword('c', n.Const(3))], n.Const((2,)),
              n.Const({'d': 4})), (1, 2, 3, 4), ctx=dict(foo=foo))
 
+        test(n.Call(n.Name('foo', 'load'), [n.Const(1), n.Const(2)],
+             [n.Keyword('c', n.Const(3))], None,
+             n.Const({'d': 4})), (1, 2, 3, 4), ctx=dict(foo=foo))
+
+        test(n.Call(n.Name('foo', 'load'), [n.Const(1)],
+             [n.Keyword('c', n.Const(3))], None,
+             n.Const({'b': 2, 'd': 4})), (1, 2, 3, 4), ctx=dict(foo=foo))
+
+        self.assert_template_fails(n.Call(n.Name('foo', 'load'), [n.Const(1)],
+             [n.Keyword('c', n.Const(3))], None,
+             n.Const({'c': 2, 'b': 23, 'd': 4})), ctx=dict(foo=foo),
+             exception=TypeError)
+
 
 def suite():
     import unittest
