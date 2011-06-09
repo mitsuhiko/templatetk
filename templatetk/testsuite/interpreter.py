@@ -8,11 +8,10 @@
     :copyright: (c) Copyright 2011 by Armin Ronacher.
     :license: BSD, see LICENSE for more details.
 """
-from templatetk.testsuite import TemplateTestCase
-
-from templatetk import nodes
-from templatetk.interpreter import Interpreter, BasicInterpreterState
-from templatetk.config import Config
+from . import nodes
+from .testsuite import TemplateTestCase
+from .interpreter import Interpreter, BasicInterpreterState
+from .config import Config
 
 
 class InterpreterTestCase(TemplateTestCase):
@@ -90,7 +89,8 @@ class ForLoopTestCase(InterpreterTestCase):
         ), '1:0;2:1;3:2;4:3;')
 
     def test_loop_with_custom_context(self):
-        from templatetk.runtime import LoopContextBase
+        from .runtime import LoopContextBase
+
         class CustomLoopContext(LoopContextBase):
             def __call__(self):
                 return unicode(self.index0)

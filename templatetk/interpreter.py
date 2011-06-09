@@ -10,9 +10,9 @@
 """
 from itertools import izip, chain
 
-from templatetk.nodeutils import NodeVisitor
-from templatetk.runtime import RuntimeInfo
-from templatetk import nodes
+from .nodeutils import NodeVisitor
+from .runtime import RuntimeInfo
+from . import nodes
 
 
 empty_iter = iter(())

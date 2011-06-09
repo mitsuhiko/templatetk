@@ -11,8 +11,8 @@
 """
 from types import MethodType, FunctionType
 
-from templatetk.runtime import LoopContext
-from templatetk.utils import Markup
+from .runtime import LoopContext
+from .utils import Markup
 
 
 #: the types we support for context functions

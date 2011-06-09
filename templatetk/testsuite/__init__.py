@@ -8,9 +8,7 @@
     :copyright: (c) Copyright 2011 by Armin Ronacher.
     :license: BSD, see LICENSE for more details.
 """
-import sys
 import unittest
-from contextlib import contextmanager
 
 
 class _ExceptionCatcher(object):
@@ -58,7 +56,7 @@ class TemplateTestCase(unittest.TestCase):
 
 
 def suite():
-    from templatetk.testsuite import interpreter
+    from .testsuite import interpreter
     suite = unittest.TestSuite()
     suite.addTest(interpreter.suite())
     return suite

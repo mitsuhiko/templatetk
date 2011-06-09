@@ -9,9 +9,8 @@
     :license: BSD, see LICENSE for more details.
 """
 
-# bundle?
+# bundle it?
 from markupsafe import Markup
-
 
 
 class _Missing(object):
