@@ -31,13 +31,9 @@ class InterpreterTestCase(TemplateTestCase):
         self.assert_equal(rv, expected)
 
     def assert_template_fails(self, node, ctx, exception, config=None):
-        try:
+        with self.assert_raises(exception):
             for item in self.evaluate(node, ctx, config):
                 pass
-        except Exception, e:
-            self.assert_equal(type(e), exception)
-        else:
-            self.fail('Expected exception of type %r' % exception.__name__)
 
 
 class IfConditionTestCase(InterpreterTestCase):
@@ -402,6 +398,10 @@ class ExpressionTestCase(InterpreterTestCase):
 
         test(n.Getitem(n.Const('Hello'), n.Slice(n.Const(1), n.Const(None),
                                                  n.Const(2)), 'load'), 'el')
+        test(n.Getitem(n.Const('Hello'), n.Slice(n.Const(None), n.Const(-1),
+                                                 n.Const(1)), 'load'), 'Hell')
+        test(n.Getitem(n.Const('Hello'), n.Slice(n.Const(None), n.Const(-1),
+                                                 n.Const(None)), 'load'), 'Hell')
 
 
 def suite():

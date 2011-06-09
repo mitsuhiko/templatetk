@@ -52,7 +52,7 @@ class Config(object):
         if isinstance(attribute, slice):
             # needed to support the legacy interface of the subscript op
             if attribute.step is None:
-                return obj[attribute.start:attribute.end]
+                return obj[attribute.start:attribute.stop]
             return obj[attribute]
         return self.getattr(obj, attribute)
 
