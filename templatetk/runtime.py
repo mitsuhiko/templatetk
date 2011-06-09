@@ -10,6 +10,27 @@
 """
 
 
+class RuntimeInfo(object):
+    """While the template engine is interpreting the ASTS or compiled
+    code it has to keep a bunch of information around.  This does not
+    keep the actual variables around, that is intepreter/compiled code
+    dependent.
+    """
+
+    def __init__(self, config):
+        self.config = config
+        self.filters = config.get_filters()
+        self.tests = config.get_tests()
+        self.block_executers = {}
+
+    def call_filter(self, name, obj, args, kwargs):
+        try:
+            func = self.filters[name]
+        except KeyError:
+            raise RuntimeError('Filter %r not found' % name)
+        return func(obj, *args, **kwargs)
+
+
 class LoopContextBase(object):
     """Base implementation for a loop context.  Solves most problems a
     loop context has to solve and implements the base interface that is

@@ -8,10 +8,10 @@
     :copyright: (c) Copyright 2011 by Armin Ronacher.
     :license: BSD, see LICENSE for more details.
 """
-import operator
 from itertools import izip, chain
 
 from templatetk.nodeutils import NodeVisitor
+from templatetk.runtime import RuntimeInfo
 from templatetk import nodes
 
 
@@ -62,9 +62,11 @@ def assign_to_state(node, value, state):
 
 
 class InterpreterState(object):
+    runtime_info_class = RuntimeInfo
 
     def __init__(self, config):
         self.config = config
+        self.info = self.runtime_info_class(config)
 
     def push_frame(self):
         pass
@@ -82,7 +84,7 @@ class InterpreterState(object):
 class BasicInterpreterState(InterpreterState):
 
     def __init__(self, config, context):
-        self.config = config
+        InterpreterState.__init__(self, config)
         self.context = [context]
 
     def push_frame(self):
@@ -111,6 +113,21 @@ class Interpreter(NodeVisitor):
     def __init__(self, config):
         NodeVisitor.__init__(self)
         self.config = config
+
+    def resolve_call_args(self, node, state):
+        args = [self.visit(arg, state) for arg in node.args]
+        kwargs = dict(self.visit(arg, state) for arg in node.kwargs)
+        if node.dyn_args is not None:
+            dyn_args = self.visit(node.dyn_args, state)
+        else:
+            dyn_args = ()
+        if node.dyn_kwargs is not None:
+            for key, value in self.visit(node.dyn_kwargs, state).iteritems():
+                if key in kwargs:
+                    raise TypeError('got multiple values for keyword '
+                                    'argument %r' % key)
+                kwargs[key] = value
+        return chain(args, dyn_args), kwargs
 
     def evaluate(self, node, state):
         assert state.config is self.config, 'config mismatch'
@@ -216,19 +233,8 @@ class Interpreter(NodeVisitor):
 
     def visit_Call(self, node, state):
         obj = self.visit(node.node, state)
-        args = [self.visit(arg, state) for arg in node.args]
-        kwargs = dict(self.visit(arg, state) for arg in node.kwargs)
-        if node.dyn_args is not None:
-            dyn_args = self.visit(node.dyn_args, state)
-        else:
-            dyn_args = ()
-        if node.dyn_kwargs is not None:
-            for key, value in self.visit(node.dyn_kwargs, state).iteritems():
-                if key in kwargs:
-                    raise TypeError('got multiple values for keyword '
-                                    'argument %r' % key)
-                kwargs[key] = value
-        return obj(*chain(args, dyn_args), **kwargs)
+        args, kwargs = self.resolve_call_args(node, state)
+        return obj(*args, **kwargs)
 
     def visit_Keyword(self, node, state):
         return node.key, self.visit(node.value, state)
@@ -305,3 +311,8 @@ class Interpreter(NodeVisitor):
                 return False
             left = right
         return True
+
+    def visit_Filter(self, node, state):
+        value = self.visit(node.node, state)
+        args, kwargs = self.resolve_call_args(node, state)
+        return state.info.call_filter(node.name, value, args, kwargs)
