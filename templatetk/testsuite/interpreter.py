@@ -212,6 +212,16 @@ class ExpressionTestCase(InterpreterTestCase):
         test(n.Or(n.Const(42), simplecall(not_called)), 42)
         self.assert_equal(not_called_buffer, [])
 
+    def test_unary(self):
+        n = nodes
+        test = self.assert_expression_equals
+
+        test(n.Pos(n.Const(-42)), -42)
+        test(n.Neg(n.Const(-42)), 42)
+        test(n.Neg(n.Const(42)), -42)
+        test(n.Not(n.Const(0)), True)
+        test(n.Not(n.Const(42)), False)
+
 
 def suite():
     import unittest

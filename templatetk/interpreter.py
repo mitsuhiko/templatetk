@@ -224,3 +224,12 @@ class Interpreter(NodeVisitor):
         if rv:
             return rv
         return self.visit(node.right, state)
+
+    def unary(functor):
+        def visitor(self, node, state):
+            return functor(self.visit(node.node, state))
+        return visitor
+
+    visit_Pos = unary(operator.pos)
+    visit_Neg = unary(operator.neg)
+    visit_Not = unary(operator.not_)
