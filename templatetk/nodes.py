@@ -581,8 +581,6 @@ class MarkSafe(Expr):
 class MarkSafeIfAutoescape(Expr):
     """Mark the wrapped expression as safe (wrap it as `Markup`) but
     only if autoescaping is active.
-
-    .. versionadded:: 2.5
     """
     fields = ('expr',)
 
