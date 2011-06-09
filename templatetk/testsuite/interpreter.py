@@ -16,12 +16,12 @@ from templatetk.config import Config
 
 class ForLoopTestCase(TemplateTestCase):
 
-    def setup(self):
-        self.intrptr = Interpreter(Config())
-
-    def assert_result_matches(self, node, ctx, expected):
-        state = BasicInterpreterState(self.intrptr.config, ctx)
-        rv = u''.join(self.intrptr.evaluate(node, state))
+    def assert_result_matches(self, node, ctx, expected, config=None):
+        if config is None:
+            config = Config()
+        intrptr = Interpreter(config)
+        state = BasicInterpreterState(intrptr.config, ctx)
+        rv = u''.join(intrptr.evaluate(node, state))
         self.assert_equal(rv, expected)
 
     def test_basic_loop(self):
@@ -50,6 +50,46 @@ class ForLoopTestCase(TemplateTestCase):
         self.assert_result_matches(template, dict(
             iterable=[1, 2, 3, 4]
         ), '1:0;2:1;3:2;4:3;')
+
+    def test_loop_with_custom_context(self):
+        from templatetk.runtime import LoopContextBase
+        class CustomLoopContext(LoopContextBase):
+            def __call__(self):
+                return unicode(self.index0)
+
+        class MyConfig(Config):
+            def wrap_loop(self, iterator, parent=None):
+                return CustomLoopContext(iterator)
+
+        n = nodes
+        template = n.Template([
+            n.For(n.Name('item', 'store'), n.Name('iterable', 'load'), [
+                n.Output([n.Name('item', 'load'), n.Const(':'),
+                          n.Call(n.Name('loop', 'load'), [], [], None, None),
+                          n.Const(';')])
+            ], None)
+        ])
+
+        self.assert_result_matches(template, dict(
+            iterable=[1, 2, 3, 4]
+        ), '1:0;2:1;3:2;4:3;', config=MyConfig())
+
+    def test_silent_loop_unpacking(self):
+        config = Config()
+        config.allow_noniter_unpacking = True
+        config.undefined_variable = lambda x: '<%s>' % x
+
+        n = nodes
+        template = n.Template([
+            n.For(n.Tuple([n.Name('item', 'store'), n.Name('whoop', 'store')],
+                          'store'), n.Name('iterable', 'load'), [
+                n.Output([n.Name('item', 'load'), n.Const(';')])
+            ], None)
+        ])
+
+        self.assert_result_matches(template, dict(
+            iterable=[1, 2, 3, 4]
+        ), '<item>;<item>;<item>;<item>;', config=config)
 
 
 def suite():

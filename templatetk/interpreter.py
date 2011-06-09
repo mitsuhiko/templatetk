@@ -8,7 +8,7 @@
     :copyright: (c) Copyright 2011 by Armin Ronacher.
     :license: BSD, see LICENSE for more details.
 """
-from itertools import izip
+from itertools import izip, chain
 
 from templatetk.nodeutils import NodeVisitor
 from templatetk import nodes
@@ -19,7 +19,12 @@ def _assign_name(node, value, state):
 
 
 def _assign_tuple(node, value, state):
-    values = tuple(value)
+    try:
+        values = tuple(value)
+    except TypeError:
+        if not state.config.allow_noniter_unpacking:
+            raise
+        return
     if state.config.strict_tuple_unpacking and \
        len(values) != len(node.items):
         raise ValueError('Dimension mismatch on tuple unpacking')
@@ -163,6 +168,25 @@ class Interpreter(NodeVisitor):
         obj = self.visit(node.node, state)
         attr = self.visit(node.attr, state)
         return self.config.getattr(obj, attr)
+
+    def visit_Call(self, node, state):
+        obj = self.visit(node.node, state)
+        args = [self.visit(arg, state) for arg in node.args]
+        kwargs = dict(self.visit(arg, state) for arg in node.kwargs)
+        if node.dyn_args is not None:
+            dyn_args = self.visit(node.dyn_args, state)
+        else:
+            dyn_args = ()
+        if node.dyn_kwargs is not None:
+            for key, value in self.visit(node.dyn_kwargs, state).iteritems():
+                if key in kwargs:
+                    raise TypeError('got multiple values for keyword '
+                                    'argument %r' % key)
+                kwargs[key] = value
+        return obj(*chain(args, dyn_args), **kwargs)
+
+    def visit_Keyword(self, node, state):
+        return node.key, self.visit(node.value, state)
 
     def visit_Const(self, node, state):
         return node.value

@@ -32,6 +32,7 @@ class Config(object):
         self.forloop_accessor = 'loop'
         self.forloop_parent_access = False
         self.strict_tuple_unpacking = False
+        self.allow_noniter_unpacking = False
 
     def get_autoescape_default(self, template_name):
         return False
