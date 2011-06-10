@@ -111,6 +111,23 @@ class InterpreterState(object):
         return self.info.get_template(template_name)
 
 
+class ContextFrameDict(dict, ContextView):
+
+    def __init__(self, config):
+        self.config = config
+
+    def resolve_var(self, key):
+        try:
+            return self[key]
+        except KeyError:
+            return self.config.undefined_variable(key)
+
+    def iter_vars(self):
+        return self.iterkeys()
+
+    __getitem__ = dict.__getitem__
+
+
 class BasicInterpreterState(InterpreterState):
 
     def __init__(self, config, template_name=None, info=None, view=None):
@@ -118,10 +135,10 @@ class BasicInterpreterState(InterpreterState):
         self.context = []
         if view is not None:
             self.context.append(view)
-        self.context.append({})
+        self.push_frame()
 
     def push_frame(self):
-        self.context.append({})
+        self.context.append(ContextFrameDict(self.config))
 
     def pop_frame(self):
         self.context.pop()
@@ -131,14 +148,16 @@ class BasicInterpreterState(InterpreterState):
 
     def resolve_var(self, key):
         for d in reversed(self.context):
-            if key in d:
+            try:
                 return d[key]
+            except KeyError:
+                continue
         return self.config.undefined_variable(key)
 
     def iter_vars(self):
         rv = set()
-        for d in self.context:
-            rv.update(d)
+        for cfd in self.context:
+            rv.update(cfd.iter_vars())
         return iter(rv)
 
 

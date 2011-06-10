@@ -31,7 +31,7 @@ class ContextView(object):
         self.config = config
 
     def resolve_var(self, key):
-        raise NotImplementedError('Cannot view context')
+        raise NotImplementedError('Cannot resolve variables in context')
 
     def iter_vars(self):
         raise NotImplementedError('Cannot list variables')
@@ -105,17 +105,10 @@ class RuntimeInfo(object):
             raise BlockLevelOverflowException(name, level)
         return func(self, view)
 
-    def clone(self):
-        rv = object.__new__(self.__class__)
-        rv.__dict__.update(self.__dict__)
-        rv.filters = dict(rv.filters)
-        rv.tests = dict(rv.tests)
-        rv.block_executers = dict(rv.block_executers)
-        # rest stays shared.  XXX: better interface and cleaner semantics
-        return rv
-
     def make_inheritance_info(self, template, template_name):
-        rv = self.clone()
+        rv = self.__class__(self.config, template_name)
+        rv.template_cache = self.template_cache
+        rv.block_executers.update(self.block_executers)
         return rv
 
 
