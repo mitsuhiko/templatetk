@@ -29,6 +29,26 @@ The following differences in semantics might cause a problem:
     transition to undefined objects possible?  More importantly: are
     undefines necessary on the compiler level?
 
+-   Context's are a biggy.  In django filters and tags are stored on the
+    parser which means that the number of available parsers/filters is
+    available at template “parse / compile time”.  However the actual
+    variables are stored at runtime in the context and there is only one
+    context.  If a block originates in another file it will share the
+    context with the template it ultimately ends up being rendered in.
+
+    On the other hand there is Jinja2 which has different context's for
+    each block unless the block is opted in to be “scoped” which in
+    retrospect was a mistake.
+
+    The proper behavior for the compiler probably would be to have the
+    abilty to reused a new level on the context for blocks or a new level
+    on the module level context.  Both behavior makes sense but it has
+    different semantics.
+
+    As the runtime info object, the compiler config and context are
+    already conceptionally separated it should be easy to have both
+    behavior so that it can be switched.
+
 Jinja2 Long-Term Todo List that Might Be Worth Considering
 ----------------------------------------------------------
 

@@ -56,7 +56,7 @@ class TemplateTestCase(unittest.TestCase):
 
 
 def suite():
-    from .testsuite import interpreter
+    from . import interpreter
     suite = unittest.TestSuite()
     suite.addTest(interpreter.suite())
     return suite

@@ -9,6 +9,7 @@
     :license: BSD, see LICENSE for more details.
 """
 from itertools import izip, chain
+from contextlib import contextmanager
 
 from .nodeutils import NodeVisitor
 from .runtime import RuntimeInfo
@@ -27,6 +28,14 @@ class ContinueLoop(InterpreterInternalException):
 
 
 class BreakLoop(InterpreterInternalException):
+    pass
+
+
+class BlockNotFoundException(InterpreterInternalException):
+    pass
+
+
+class BlockLevelOverflowException(InterpreterInternalException):
     pass
 
 
@@ -70,6 +79,23 @@ class InterpreterState(object):
 
     def make_runtime_info(self):
         return self.runtime_info_class(self.config)
+
+    def evaluate_block(self, node, level=1):
+        try:
+            func = self.info.block_executers[node.name][-level]
+        except KeyError:
+            raise BlockNotFoundException(node.name)
+        except IndexError:
+            raise BlockLevelOverflowException(node.name, level)
+        return func(self.info)
+
+    @contextmanager
+    def frame(self):
+        self.push_frame()
+        try:
+            yield
+        finally:
+            self.pop_frame()
 
     def push_frame(self):
         pass
@@ -337,24 +363,24 @@ class Interpreter(NodeVisitor):
         return value
 
     def visit_Scope(self, node, state):
-        state.push_frame()
-        try:
+        with state.frame():
             for event in self.visit_block(node.body, state):
                 yield event
-        finally:
-            state.pop_frame()
 
     def visit_ExprStmt(self, node, state):
         self.visit(node.node, state)
 
     def visit_Block(self, node, state):
-        raise NotImplementedError()
+        with state.frame():
+            for event in state.evaluate_block(node):
+                yield event
 
     def visit_Extends(self, node, state):
         raise NotImplementedError()
 
     def visit_FilterBlock(self, node, state):
-        raise NotImplementedError()
+        with state.frame():
+            pass
 
     def visit_Include(self, node, state):
         raise NotImplementedError()
