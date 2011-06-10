@@ -31,7 +31,10 @@ class ContextView(object):
         self.config = config
 
     def resolve_var(self, key):
-        raise NotImplementedError('Cnanot view context')
+        raise NotImplementedError('Cannot view context')
+
+    def iter_vars(self):
+        raise NotImplementedError('Cannot list variables')
 
     def __getitem__(self, key):
         rv = self.resolve_var(key)

@@ -8,6 +8,8 @@
     :copyright: (c) Copyright 2011 by Armin Ronacher.
     :license: BSD, see LICENSE for more details.
 """
+from __future__ import with_statement
+
 from itertools import izip, chain
 from contextlib import contextmanager
 
@@ -102,6 +104,9 @@ class InterpreterState(object):
     def resolve_var(self, key):
         raise NotImplementedError('resolving variables')
 
+    def iter_vars(self):
+        raise NotImplementedError('listing variables')
+
     def get_template(self, template_name):
         return self.info.get_template(template_name)
 
@@ -130,6 +135,12 @@ class BasicInterpreterState(InterpreterState):
                 return d[key]
         return self.config.undefined_variable(key)
 
+    def iter_vars(self):
+        rv = set()
+        for d in self.context:
+            rv.update(d)
+        return iter(rv)
+
 
 class InterpreterStateContextView(ContextView):
 
@@ -139,6 +150,9 @@ class InterpreterStateContextView(ContextView):
 
     def resolve_var(self, key):
         return self.state.resolve_var(key)
+
+    def iter_vars(self):
+        return self.state.iter_vars()
 
 
 class Interpreter(NodeVisitor):

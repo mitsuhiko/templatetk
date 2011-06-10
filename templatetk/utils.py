@@ -8,9 +8,17 @@
     :copyright: (c) Copyright 2011 by Armin Ronacher.
     :license: BSD, see LICENSE for more details.
 """
+from cgi import escape
 
-# bundle it?
-from markupsafe import Markup
+
+class Markup(unicode):
+
+    @classmethod
+    def escape(cls, value):
+        return cls(escape(value))
+
+    def __html__(self):
+        return self
 
 
 class _Missing(object):
