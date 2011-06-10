@@ -31,14 +31,6 @@ class BreakLoop(InterpreterInternalException):
     pass
 
 
-class BlockNotFoundException(InterpreterInternalException):
-    pass
-
-
-class BlockLevelOverflowException(InterpreterInternalException):
-    pass
-
-
 class StopExecutionException(InterpreterInternalException):
     pass
 
@@ -87,19 +79,8 @@ class InterpreterState(object):
         return self.runtime_info_class(self.config, template_name)
 
     def evaluate_block(self, node, level=1):
-        # XXX: move this logic to the runtime info object?  it's kinda shared
-        # with what will go into the compiler.
-        #
-        # idea: both compiled and interpreted stuff accept an info object
-        # and yield strings and have different understandings of what a
-        # context object actually is.
-        try:
-            func = self.info.block_executers[node.name][level - 1]
-        except KeyError:
-            raise BlockNotFoundException(node.name)
-        except IndexError:
-            raise BlockLevelOverflowException(node.name, level)
-        return func(self.info, ContextView(self))
+        view = ContextView(self)
+        return self.info.evaluate_block(node.name, level, view)
 
     @contextmanager
     def frame(self):

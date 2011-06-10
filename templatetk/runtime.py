@@ -8,6 +8,7 @@
     :copyright: (c) Copyright 2011 by Armin Ronacher.
     :license: BSD, see LICENSE for more details.
 """
+from .exceptions import BlockNotFoundException, BlockLevelOverflowException
 
 
 class TemplateInterface(object):
@@ -91,6 +92,15 @@ class RuntimeInfo(object):
 
     def register_block(self, name, executor):
         self.block_executers.setdefault(name, []).append(executor)
+
+    def evaluate_block(self, name, level=1, view=None):
+        try:
+            func = self.block_executers[name][level - 1]
+        except KeyError:
+            raise BlockNotFoundException(name)
+        except IndexError:
+            raise BlockLevelOverflowException(name, level)
+        return func(self, view)
 
     def clone(self):
         rv = object.__new__(self.__class__)
