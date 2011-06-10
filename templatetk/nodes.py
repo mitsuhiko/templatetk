@@ -57,12 +57,12 @@ class NodeType(type):
 
     def __new__(cls, name, bases, d):
         newslots = []
+        assert len(bases) == 1, 'multiple inheritance not allowed'
         for attr in 'fields', 'attributes':
             names = d.get(attr, ())
             storage = []
             storage.extend(getattr(bases[0], attr, ()))
             storage.extend(names)
-            assert len(bases) == 1, 'multiple inheritance not allowed'
             assert len(storage) == len(set(storage)), 'layout conflict'
             d[attr] = tuple(storage)
             newslots.extend(names)
