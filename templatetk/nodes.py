@@ -265,7 +265,7 @@ class Function(Stmt):
 
 class FilterBlock(Stmt):
     """Node for filter sections."""
-    fields = ('body', 'filter')
+    fields = ('body', 'name', 'args', 'kwargs', 'dyn_args', 'dyn_kwargs')
 
 
 class Block(Stmt):

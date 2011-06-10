@@ -59,6 +59,41 @@ class IfConditionTestCase(InterpreterTestCase):
         self.assert_result_matches(template, dict(a=42), '42;23;42')
 
 
+class FilterBlockTestCase(InterpreterTestCase):
+
+    def test_basic_filtering(self):
+        n = nodes
+        config = Config()
+        config.get_filters = lambda: {'uppercase': lambda x: x.upper()}
+
+        template = n.Template([
+            n.FilterBlock([
+                n.Output([n.Const('Hello '), n.Name('name', 'load')])
+            ], 'uppercase', [], [], None, None)
+        ])
+
+        self.assert_result_matches(template, dict(name='World'), 'HELLO WORLD',
+                                   config=config)
+
+    def test_filter_scoping(self):
+        n = nodes
+        config = Config()
+        config.get_filters = lambda: {'uppercase': lambda x: x.upper()}
+
+        template = n.Template([
+            n.FilterBlock([
+                n.Output([n.Const('Hello '), n.Name('x', 'load'),
+                          n.Const(';')]),
+                n.Assign(n.Name('x', 'store'), n.Const(23)),
+                n.Output([n.Name('x', 'load')])
+            ], 'uppercase', [], [], None, None),
+            n.Output([n.Const(';'), n.Name('x', 'load')])
+        ])
+
+        self.assert_result_matches(template, dict(x=42), 'HELLO 42;23;42',
+                                   config=config)
+
+
 class ForLoopTestCase(InterpreterTestCase):
 
     def test_basic_loop(self):
@@ -462,5 +497,6 @@ def suite():
     suite = unittest.TestSuite()
     suite.addTest(unittest.makeSuite(IfConditionTestCase))
     suite.addTest(unittest.makeSuite(ForLoopTestCase))
+    suite.addTest(unittest.makeSuite(FilterBlockTestCase))
     suite.addTest(unittest.makeSuite(ExpressionTestCase))
     return suite

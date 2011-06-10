@@ -73,14 +73,22 @@ def assign_to_state(node, value, state):
 class InterpreterState(object):
     runtime_info_class = RuntimeInfo
 
-    def __init__(self, config):
+    def __init__(self, config, info=None):
         self.config = config
-        self.info = self.make_runtime_info()
+        if info is None:
+            info = self.make_runtime_info()
+        self.info = info
 
     def make_runtime_info(self):
         return self.runtime_info_class(self.config)
 
     def evaluate_block(self, node, level=1):
+        # XXX: move this logic to the runtime info object?  it's kinda shared
+        # with what will go into the compiler.
+        #
+        # idea: both compiled and interpreted stuff accept an info object
+        # and yield strings and have different understandings of what a
+        # context object actually is.
         try:
             func = self.info.block_executers[node.name][-level]
         except KeyError:
@@ -88,6 +96,13 @@ class InterpreterState(object):
         except IndexError:
             raise BlockLevelOverflowException(node.name, level)
         return func(self.info)
+
+    def register_block(self, node, executor=None):
+        if executor is None:
+            def executor(info):
+                for event in self.visit_block(node.body, self):
+                    yield event
+        self.info.block_executers.setdefault(node.name, []).append(executor)
 
     @contextmanager
     def frame(self):
@@ -184,6 +199,8 @@ class Interpreter(NodeVisitor):
                     yield event
 
     def visit_Template(self, node, state):
+        for block in node.find_all(nodes.Block):
+            state.register_block(block)
         for event in self.visit_block(node.body, state):
             yield event
 
@@ -376,11 +393,16 @@ class Interpreter(NodeVisitor):
                 yield event
 
     def visit_Extends(self, node, state):
-        raise NotImplementedError()
+        template_name = self.visit(node.node, state)
+        template = state.get_template(template_name)
+        for block, executor in template.iter_blocks():
+            state.register_block(block, executor)
 
     def visit_FilterBlock(self, node, state):
         with state.frame():
-            pass
+            value = ''.join(self.visit_block(node.body, state))
+            args, kwargs = self.resolve_call_args(node, state)
+            yield state.info.call_filter(node.name, value, args, kwargs)
 
     def visit_Include(self, node, state):
         raise NotImplementedError()
