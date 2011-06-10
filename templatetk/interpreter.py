@@ -12,7 +12,7 @@ from itertools import izip, chain
 from contextlib import contextmanager
 
 from .nodeutils import NodeVisitor
-from .runtime import RuntimeInfo
+from .runtime import RuntimeInfo, ContextView
 from . import nodes
 
 
@@ -36,6 +36,10 @@ class BlockNotFoundException(InterpreterInternalException):
 
 
 class BlockLevelOverflowException(InterpreterInternalException):
+    pass
+
+
+class StopExecutionException(InterpreterInternalException):
     pass
 
 
@@ -73,14 +77,14 @@ def assign_to_state(node, value, state):
 class InterpreterState(object):
     runtime_info_class = RuntimeInfo
 
-    def __init__(self, config, info=None):
+    def __init__(self, config, template_name, info=None, view=None):
         self.config = config
         if info is None:
-            info = self.make_runtime_info()
+            info = self.make_runtime_info(template_name)
         self.info = info
 
-    def make_runtime_info(self):
-        return self.runtime_info_class(self.config)
+    def make_runtime_info(self, template_name):
+        return self.runtime_info_class(self.config, template_name)
 
     def evaluate_block(self, node, level=1):
         # XXX: move this logic to the runtime info object?  it's kinda shared
@@ -90,19 +94,12 @@ class InterpreterState(object):
         # and yield strings and have different understandings of what a
         # context object actually is.
         try:
-            func = self.info.block_executers[node.name][-level]
+            func = self.info.block_executers[node.name][level - 1]
         except KeyError:
             raise BlockNotFoundException(node.name)
         except IndexError:
             raise BlockLevelOverflowException(node.name, level)
-        return func(self.info)
-
-    def register_block(self, node, executor=None):
-        if executor is None:
-            def executor(info):
-                for event in self.visit_block(node.body, self):
-                    yield event
-        self.info.block_executers.setdefault(node.name, []).append(executor)
+        return func(self.info, ContextView(self))
 
     @contextmanager
     def frame(self):
@@ -119,17 +116,23 @@ class InterpreterState(object):
         pass
 
     def assign_var(self, key, value):
-        pass
+        raise NotImplementedError('assigning variables')
 
     def resolve_var(self, key):
-        pass
+        raise NotImplementedError('resolving variables')
+
+    def get_template(self, template_name):
+        return self.info.get_template(template_name)
 
 
 class BasicInterpreterState(InterpreterState):
 
-    def __init__(self, config, context):
-        InterpreterState.__init__(self, config)
-        self.context = [context]
+    def __init__(self, config, template_name=None, info=None, view=None):
+        InterpreterState.__init__(self, config, template_name, info, view)
+        self.context = []
+        if view is not None:
+            self.context.append(view)
+        self.context.append({})
 
     def push_frame(self):
         self.context.append({})
@@ -145,6 +148,16 @@ class BasicInterpreterState(InterpreterState):
             if key in d:
                 return d[key]
         return self.config.undefined_variable(key)
+
+
+class InterpreterStateContextView(ContextView):
+
+    def __init__(self, state):
+        ContextView.__init__(self, state.config)
+        self.state = state
+
+    def resolve_var(self, key):
+        return self.state.resolve_var(key)
 
 
 class Interpreter(NodeVisitor):
@@ -175,20 +188,25 @@ class Interpreter(NodeVisitor):
 
     def evaluate(self, node, state):
         assert state.config is self.config, 'config mismatch'
+        return self.visit(node, state)
+
+    def execute(self, node, state):
         try:
-            return self.visit(node, state)
+            for event in self.evaluate(node, state):
+                yield event
+        except StopExecutionException:
+            pass
         except InterpreterInternalException, e:
             raise AssertionError('An interpreter internal exception '
                                  'was raised.  ASTS might be invalid. '
                                  'Got (%r)' % e)
 
-    def assign_to_state(self, state, node, item):
-        assert node.can_assign(), 'tried to assign to %r' % item
-        items = tuple(item)
-        if len(items) != len(self.items):
-            raise ValueError('Error on tuple unpacking, dimensions dont match')
-        for node, tuple_item in izip(self.items, items):
-            node.assign_to_state(state, tuple_item)
+    def make_block_executor(self, node, state_class):
+        def executor(info, view):
+            state = state_class(info.config, info.template_name, info, view)
+            for event in self.visit_block(node.body, state):
+                yield event
+        return executor
 
     def visit_block(self, nodes, state):
         if nodes:
@@ -198,9 +216,13 @@ class Interpreter(NodeVisitor):
                 for event in rv:
                     yield event
 
-    def visit_Template(self, node, state):
+    def iter_blocks(self, node, state_class):
         for block in node.find_all(nodes.Block):
-            state.register_block(block)
+            yield block.name, self.make_block_executor(block, state_class)
+
+    def visit_Template(self, node, state):
+        for block, executor in self.iter_blocks(node, type(state)):
+            state.info.register_block(block, executor)
         for event in self.visit_block(node.body, state):
             yield event
 
@@ -393,10 +415,14 @@ class Interpreter(NodeVisitor):
                 yield event
 
     def visit_Extends(self, node, state):
-        template_name = self.visit(node.node, state)
+        template_name = self.visit(node.template, state)
         template = state.get_template(template_name)
-        for block, executor in template.iter_blocks():
-            state.register_block(block, executor)
+        context_view = InterpreterStateContextView(state)
+        info = state.info.make_inheritance_info(template, template_name)
+        for event in state.config.yield_from_template(template, info,
+                                                      context_view):
+            yield event
+        raise StopExecutionException()
 
     def visit_FilterBlock(self, node, state):
         with state.frame():

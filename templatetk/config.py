@@ -81,3 +81,15 @@ class Config(object):
 
     def wrap_loop(self, iterator, parent=None):
         return LoopContext(iterator)
+
+    def join_path(self, parent, template_name):
+        return template_name
+
+    def get_template(self, template_name):
+        raise NotImplementedError('Default config cannot load templates')
+
+    def yield_from_template(self, template, info, view=None):
+        raise NotImplementedError('Cannot yield from template objects')
+
+    def iter_template_blocks(self, template):
+        raise NotImplementedError('Cannot get blocks from template')

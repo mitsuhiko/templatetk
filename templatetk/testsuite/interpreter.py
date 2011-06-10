@@ -15,23 +15,38 @@ from ..config import Config
 
 
 class InterpreterTestCase(TemplateTestCase):
+    interpreter_state_class = BasicInterpreterState
 
-    def evaluate(self, node, ctx=None, config=None):
+    def make_interpreter_state(self, config, ctx, info=None):
+        return self.interpreter_state_class(config, info=info, view=ctx)
+
+    def make_interpreter(self, config):
+        return Interpreter(config)
+
+    def make_interpreter_and_state(self, config, ctx, info):
         if config is None:
             config = Config()
         if ctx is None:
             ctx = {}
-        intrptr = Interpreter(config)
-        state = BasicInterpreterState(intrptr.config, ctx)
+        state = self.make_interpreter_state(config, ctx, info)
+        intrptr = self.make_interpreter(config)
+        return intrptr, state
+
+    def evaluate(self, node, ctx=None, config=None, info=None):
+        intrptr, state = self.make_interpreter_and_state(config, ctx, info)
         return intrptr.evaluate(node, state)
 
+    def execute(self, node, ctx=None, config=None, info=None):
+        intrptr, state = self.make_interpreter_and_state(config, ctx, info)
+        return intrptr.execute(node, state)
+
     def assert_result_matches(self, node, ctx, expected, config=None):
-        rv = ''.join(self.evaluate(node, ctx, config))
+        rv = u''.join(self.execute(node, ctx, config))
         self.assert_equal(rv, expected)
 
     def assert_template_fails(self, node, ctx, exception, config=None):
         with self.assert_raises(exception):
-            for item in self.evaluate(node, ctx, config):
+            for event in self.execute(node, ctx, config):
                 pass
 
 
@@ -283,7 +298,7 @@ class ExpressionTestCase(InterpreterTestCase):
         intrptr = Interpreter(config)
         if ctx is None:
             ctx = {}
-        state = BasicInterpreterState(intrptr.config, ctx)
+        state = self.make_interpreter_state(intrptr.config, ctx)
         rv = intrptr.evaluate(node, state)
         self.assert_equal(rv, expected)
 
@@ -487,9 +502,59 @@ class ExpressionTestCase(InterpreterTestCase):
 
         cfg = Config()
         cfg.get_autoescape_default = lambda x: True
-        rv = self.evaluate(n.MarkSafeIfAutoescape(n.Const('<Hello World!>')), config=cfg)
+        rv = self.evaluate(n.MarkSafeIfAutoescape(n.Const('<Hello World!>')),
+                           config=cfg)
         self.assert_equal(type(rv), cfg.markup_type)
         self.assert_equal(unicode(rv), '<Hello World!>')
+
+
+class _SimpleTemplate(object):
+
+    def __init__(self, template_name, node, test_case):
+        self.template_name = template_name
+        self.node = node
+        self.test_case = test_case
+
+
+class InheritanceTestCase(InterpreterTestCase):
+
+    def make_inheritance_config(self, templates):
+        test_case = self
+
+        class CustomConfig(Config):
+            def get_template(self, name):
+                return _SimpleTemplate(name, templates[name], test_case)
+            def yield_from_template(self, template, info, view=None):
+                return template.test_case.evaluate(template.node, ctx=view,
+                                                   config=self, info=info)
+            def iter_template_blocks(self, template):
+                intrptr = Interpreter(self)
+                return intrptr.iter_blocks(template.node,
+                                           test_case.interpreter_state_class)
+        return CustomConfig()
+
+    def test_basic_inheritance(self):
+        n = nodes
+
+        index_template = n.Template([
+            n.Extends(n.Const('layout.html')),
+            n.Block('the_block', [
+                n.Output([n.Const('block contents')])
+            ])
+        ])
+        layout_template = n.Template([
+            n.Output([n.Const('before block;')]),
+            n.Block('the_block', [n.Output([n.Const('default contents')])]),
+            n.Output([n.Const(';after block')])
+        ])
+
+        config = self.make_inheritance_config({
+            'index.html':       index_template,
+            'layout.html':      layout_template
+        })
+
+        self.assert_result_matches(index_template, dict(),
+            'before block;block contents;after block', config=config)
 
 
 def suite():
@@ -499,4 +564,5 @@ def suite():
     suite.addTest(unittest.makeSuite(ForLoopTestCase))
     suite.addTest(unittest.makeSuite(FilterBlockTestCase))
     suite.addTest(unittest.makeSuite(ExpressionTestCase))
+    suite.addTest(unittest.makeSuite(InheritanceTestCase))
     return suite
