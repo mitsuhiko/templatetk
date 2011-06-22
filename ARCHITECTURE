@@ -47,3 +47,83 @@ way the system will run on GAE and other restricted environments too.
 
 Also the interpreter has a straightforward design which makes it easy to
 experiment with a template language.
+
+Scoping and Python
+------------------
+
+Scoping in general works different between Django/Jinja2 and Python which
+results in a whole lot of problems for the template compilation.  Django
+and Jinja2 introduce a new scope for every block (with the notable
+exception of 'if' in Jinja2).  This would not be a problem if we would
+never cross a function scope boundary.  Because however this is exactly
+how blocks and macros work in the compilation we have to trick.
+
+The core problem is that an identifier is either local or global or a name
+pointing to a variable from a function closure, but not both.  As such it
+becomes impossible to reference a variable from an outer scope, copy the
+value, replace it with a new value and backdown later.
+
+The solution currently used by the compilation backend is giving each
+logical variable a new name::
+
+    a = 42
+    b = 23
+    for a in y:
+        print a
+
+Would turn into something like this::
+
+    l_a_1 = 42
+    l_b_2 = 23
+    l_y_3 = rtstate.lookup_var('y')
+    for l_a_4 in l_y_3:
+        print l_a_4
+
+The downside is that we're currently not setting those to `None` or
+something similar after being used.  This means that after a scope was
+"left" the variables stick around.  I think it's the better idea because
+templates don't run for long so the little memory overhead does not matter
+too much.  The upside is that people will not start to rely on reference
+counting because we basically keep references around for a long time
+(until the function returns).
+
+Unicode Identifiers
+-------------------
+
+-   Jinja2 limits itself to ASCII identifiers under Python 2 which
+    simplifies a lot of handling internally, Django however supports non
+    unicode identifiers because the parser never limited it to be ASCII
+    only and the strings coerce nicely.  The question now is if this is
+    something we should continue to support or not.  Generally it would be
+    possible, but it requires to encode the identifiers with something
+    (hexlify for instance).
+
+The Context
+-----------
+
+Django has a context object that is the main data store for variables.
+While Jinja2 has an object with the same name, it does not act as a data
+store but only as a data source.  The main difference is that Jinja2 does
+not guarantee that variables will end up in there.  In fact, it's
+currently the case that no variables show up in there except for toplevel
+assignments.  This is a concept that worked well for Jinja2 and is the
+source for many performance improvements compared to Django itself.
+
+Unfortunately however this plan will not work very well with the new
+template compiler interface as the existing code will want to be able to
+play with the context object and modify it.
+
+Internally we will probably provide at least a read-only view of context
+variables if necessary to calling code.  The eway the implementation
+handles this is by creating dictionaries with local variables if
+necessary.  At any point in the execution Jinja2 knows what variables are
+assigned and to what local identifier.  If a special ndoe comes around it
+will create a new dictionary and hand it over to others.
+
+Generally the context problem however also appears with imports and
+includes.  The way this internally works is by specifying that any object
+with `__getitem__`, `__iter__` and `__contains__` can be a data source.
+For instnace the interpreter will just push any object on the stack before
+the "local variable" scope.  That way it's also possible to mix compiled
+and interpreted templates as the only common interface will have to be a
+way to find variables from the context.
