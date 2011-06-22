@@ -85,11 +85,16 @@ class SExprTestCase(TemplateTestCase):
         ''')
 
         node2 = astutil.from_sexpr(astutil.to_sexpr(node))
-
         expected = astutil.to_sexpr(node)
         got = astutil.to_sexpr(node2)
-
         self.assert_equal(expected, got)
+        astutil.fix_missing_locations(node2)
+
+        ns = {}
+        exec compile(node2, '', 'exec') in ns
+        something, obj = ns['test']()
+        self.assert_equal(something, [-1, -2, -2, -1])
+        self.assert_equal(obj.__class__.__name__, 'Foo')
 
 
 def suite():
