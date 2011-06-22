@@ -49,6 +49,49 @@ The following differences in semantics might cause a problem:
     already conceptionally separated it should be easy to have both
     behavior so that it can be switched.
 
+-   One big problem for the identifier handling in Jinja2 is the fact that
+    the if-statement has different scoping rules in that it does not
+    introduce a new scope.  This means that Jinja2 had to compensate for
+    the branch that was not taken in case variables were not assigned in
+    that branch that were in the other.  Right now the template
+    compilation system here does not support this which simplifies the
+    code a lot.  Because however this is very useful we should still
+    support this.  Note very template engine will want to have Django
+    semantics regarding scoping.  However that implementation then should
+    allow it to disable scopes in general which also means that it have to
+    take empty loops and else clauses to loops into account.
+
+Scoping and Python
+------------------
+
+Scoping in general works different between Django/Jinja2 and Python which
+results in a whole lot of problems for the template compilation.  Django
+and Jinja2 introduce a new scope for every block (with the notable
+exception of 'if' in Jinja2).  This would not be a problem if we would
+never cross a function scope boundary.  Because however this is exactly
+how blocks and macros work in the compilation we have to trick.
+
+The core problem is that an identifier is either local or global or a name
+pointing to a variable from a function closure, but not both.  As such it
+becomes impossible to reference a variable from an outer scope, copy the
+value, replace it with a new value and backdown later.
+
+The solution currently used by the compilation backend is giving each
+logical variable a new name::
+
+    a = 42
+    b = 23
+    for a in y:
+        print a
+
+Would turn into something like this::
+
+    l_a_1 = 42
+    l_b_2 = 23
+    l_y_3 = rtstate.lookup_var('y')
+    for l_a_4 in l_y_3:
+        print l_a_4
+
 Jinja2 Long-Term Todo List that Might Be Worth Considering
 ----------------------------------------------------------
 

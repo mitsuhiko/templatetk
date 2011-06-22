@@ -20,8 +20,6 @@
 """
 from __future__ import with_statement
 
-from binascii import hexlify, unhexlify
-
 from .nodeutils import NodeVisitor
 from .astutil import fix_missing_locations
 from . import nodes
@@ -44,7 +42,7 @@ _context_target_map = {
 class IdentManager(object):
 
     def __init__(self):
-        self.index = 0
+        self.index = 1
 
     def next_num(self):
         num = self.index
@@ -52,15 +50,15 @@ class IdentManager(object):
         return num
 
     def override(self, name):
-        return '%s_%s' % (self.encode(name), self.next_num())
+        return self.encode(name, self.next_num())
 
-    def encode(self, name):
-        return 'l_%s' % hexlify(name)
+    def encode(self, name, suffix=0):
+        return 'l_%s_%d' % (name, suffix)
 
     def decode(self, name):
         if name[:2] != 'l_':
             return False
-        return unhexlify(name.split('_', 1)[0])
+        return name[2:].rsplit('_', 1)[0]
 
     def iter_identifier_maps(self, start):
         ptr = start
