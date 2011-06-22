@@ -8,7 +8,8 @@
     :copyright: (c) Copyright 2011 by Armin Ronacher.
     :license: BSD, see LICENSE for more details.
 """
-from .exceptions import BlockNotFoundException, BlockLevelOverflowException
+from .exceptions import BlockNotFoundException, BlockLevelOverflowException, \
+     TemplateNotFound, TemplatesNotFound
 
 
 class TemplateInterface(object):
@@ -73,6 +74,20 @@ class RuntimeInfo(object):
         self.template_cache[template_name] = rv
         return rv
 
+    def select_template(self, template_names):
+        for name in templates_names:
+            try:
+                return self.get_template(name)
+            except TemplateNotFound:
+                pass
+        raise TemplatesNotFound(template_names)
+
+    def get_or_select_template(self, template_name_or_list):
+        if isinstance(template_name_or_list, basestring):
+            return self.get_template(template_name_or_list)
+        else:
+            return self.select_template(template_name_or_list)
+
     def get_filter(self, name):
         try:
             return self.filters[name]
@@ -105,9 +120,13 @@ class RuntimeInfo(object):
             raise BlockLevelOverflowException(name, level)
         return func(self, view)
 
-    def make_inheritance_info(self, template, template_name):
+    def make_include_info(self, template, template_name):
         rv = self.__class__(self.config, template_name)
         rv.template_cache = self.template_cache
+        return rv
+
+    def make_inheritance_info(self, template, template_name):
+        rv = self.make_include_info(template, template_name)
         rv.block_executers.update(self.block_executers)
         return rv
 

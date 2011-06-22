@@ -15,6 +15,7 @@ from contextlib import contextmanager
 
 from .nodeutils import NodeVisitor
 from .runtime import RuntimeInfo, ContextView
+from .exceptions import TemplateNotFound
 from . import nodes
 
 
@@ -109,6 +110,9 @@ class InterpreterState(object):
 
     def get_template(self, template_name):
         return self.info.get_template(template_name)
+
+    def get_or_select_template(self, template_name_or_list):
+        return self.info.get_or_select_template(template_name_or_list)
 
 
 class ContextFrameDict(dict, ContextView):
@@ -445,7 +449,21 @@ class Interpreter(NodeVisitor):
             yield state.info.call_filter(node.name, value, args, kwargs)
 
     def visit_Include(self, node, state):
-        raise NotImplementedError()
+        template_name = self.visit(node.template, state)
+        try:
+            template = state.get_or_select_template(template_name)
+        except TemplateNotFound:
+            if not node.ignore_missing:
+                raise
+            return
+        if node.with_context:
+            context_view = InterpreterStateContextView(state)
+        else:
+            context_view = None
+        info = state.info.make_include_info(template, template_name)
+        for event in state.config.yield_from_template(template, info,
+                                                      context_view):
+            yield event
 
     def visit_Import(self, node, state):
         raise NotImplementedError()

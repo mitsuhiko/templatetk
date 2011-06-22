@@ -518,7 +518,7 @@ class _SimpleTemplate(object):
         self.test_case = test_case
 
 
-class InheritanceTestCase(InterpreterTestCase):
+class LoaderTestCase(InterpreterTestCase):
 
     def make_inheritance_config(self, templates):
         test_case = self
@@ -534,6 +534,9 @@ class InheritanceTestCase(InterpreterTestCase):
                 return intrptr.iter_blocks(template.node,
                                            test_case.interpreter_state_class)
         return CustomConfig()
+
+
+class InheritanceTestCase(LoaderTestCase):
 
     def test_basic_inheritance(self):
         n = nodes
@@ -559,6 +562,29 @@ class InheritanceTestCase(InterpreterTestCase):
             'before block;block contents;after block', config=config)
 
 
+class IncludeTestCase(LoaderTestCase):
+
+    def test_basic_include(self):
+        n = nodes
+
+        index_template = n.Template([
+            n.Output([n.Const('1\n')]),
+            n.Include(n.Const('include.html'), True, False),
+            n.Output([n.Const('\n2')])
+        ])
+        include_template = n.Template([
+            n.Output([n.Const('A')]),
+        ])
+
+        config = self.make_inheritance_config({
+            'index.html':       index_template,
+            'include.html':     include_template
+        })
+
+        self.assert_result_matches(index_template, dict(),
+            '1\nA\n2', config=config)
+
+
 def suite():
     import unittest
     suite = unittest.TestSuite()
@@ -567,4 +593,5 @@ def suite():
     suite.addTest(unittest.makeSuite(FilterBlockTestCase))
     suite.addTest(unittest.makeSuite(ExpressionTestCase))
     suite.addTest(unittest.makeSuite(InheritanceTestCase))
+    suite.addTest(unittest.makeSuite(IncludeTestCase))
     return suite
