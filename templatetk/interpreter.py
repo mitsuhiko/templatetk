@@ -101,6 +101,16 @@ class InterpreterState(object):
     def __getitem__(self, key):
         raise NotImplementedError()
 
+    def __contains__(self, key):
+        try:
+            self.__getitem__(key)
+            return True
+        except KeyError:
+            return False
+
+    def __iter__(self):
+        raise NotImplementedError()
+
     def resolve_var(self, key):
         try:
             return self.__getitem__(key)
@@ -146,6 +156,14 @@ class BasicInterpreterState(InterpreterState):
             except KeyError:
                 continue
         raise KeyError(key)
+
+    def __iter__(self):
+        found = set()
+        for d in reversed(self.context):
+            for key in d:
+                if key not in found:
+                    found.add(key)
+                    yield key
 
 
 class Interpreter(NodeVisitor):
