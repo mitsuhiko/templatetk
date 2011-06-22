@@ -9,8 +9,6 @@
     :copyright: (c) Copyright 2011 by Armin Ronacher.
     :license: BSD, see LICENSE for more details.
 """
-from __future__ import with_statement
-
 from .. import nodes
 from ..config import Config
 

@@ -10,7 +10,7 @@
 """
 from __future__ import with_statement
 
-from . import _basicexec as base
+from . import _basicexec
 
 from . import TemplateTestCase
 from ..interpreter import Interpreter, BasicInterpreterState
@@ -86,4 +86,4 @@ class InterpreterTestCase(TemplateTestCase):
 
 
 def suite():
-    return base.make_suite(InterpreterTestCase, __name__)
+    return _basicexec.make_suite(InterpreterTestCase, __name__)
