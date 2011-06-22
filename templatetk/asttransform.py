@@ -175,7 +175,7 @@ class ASTTransformer(NodeVisitor):
 
         for target, sourcename in fstate.requires_lookup.iteritems():
             before.append(ast.Assign([ast.Name(target, ast.Store())],
-                self.make_call('rtstate', 'resolve_var',
+                self.make_call('rtstate', 'lookup_var',
                                [nodes.Const(sourcename)], fstate)))
 
         body[:] = before + body

@@ -72,7 +72,7 @@ def assign_to_state(node, value, state):
 class InterpreterState(object):
     runtime_info_class = RuntimeInfo
 
-    def __init__(self, config, template_name, info=None, view=None):
+    def __init__(self, config, template_name, info=None, vars=None):
         self.config = config
         if info is None:
             info = self.make_runtime_info(template_name)
@@ -119,11 +119,11 @@ class InterpreterState(object):
 
 class BasicInterpreterState(InterpreterState):
 
-    def __init__(self, config, template_name=None, info=None, view=None):
-        InterpreterState.__init__(self, config, template_name, info, view)
+    def __init__(self, config, template_name=None, info=None, vars=None):
+        InterpreterState.__init__(self, config, template_name, info, vars)
         self.context = []
-        if view is not None:
-            self.context.append(view)
+        if vars is not None:
+            self.context.append(vars)
         self.push_frame()
         self.toplevel = self.context[-1]
 
@@ -190,8 +190,8 @@ class Interpreter(NodeVisitor):
                                  'Got (%r)' % e)
 
     def make_block_executor(self, node, state_class):
-        def executor(info, view):
-            state = state_class(info.config, info.template_name, info, view)
+        def executor(info, vars):
+            state = state_class(info.config, info.template_name, info, vars)
             for event in self.visit_block(node.body, state):
                 yield event
         return executor
@@ -426,24 +426,24 @@ class Interpreter(NodeVisitor):
                 raise
             return
         if node.with_context:
-            context_view = self
+            vars = self
         else:
-            context_view = None
+            vars = None
         info = state.info.make_info(template, template_name, 'include')
         for event in state.config.yield_from_template(template, info,
-                                                      context_view):
+                                                      vars):
             yield event
 
     def resolve_import(self, node, state):
         template_name = self.visit(node.template, state)
         template = state.get_template(template_name)
         if node.with_context:
-            context_view = self
+            vars = self
         else:
-            context_view = None
+            vars = None
         info = state.info.make_info(template, template_name, 'import')
         gen = state.config.yield_from_template(template, info,
-                                               context_view)
+                                               vars)
         return info.make_module(gen)
 
     def visit_Import(self, node, state):

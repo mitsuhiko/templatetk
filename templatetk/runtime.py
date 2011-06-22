@@ -80,14 +80,14 @@ class RuntimeInfo(object):
     def register_block(self, name, executor):
         self.block_executers.setdefault(name, []).append(executor)
 
-    def evaluate_block(self, name, level=1, view=None):
+    def evaluate_block(self, name, level=1, vars=None):
         try:
             func = self.block_executers[name][level - 1]
         except KeyError:
             raise BlockNotFoundException(name)
         except IndexError:
             raise BlockLevelOverflowException(name, level)
-        return func(self, view)
+        return func(self, vars)
 
     def make_info(self, template, template_name, behavior='extends'):
         assert behavior in ('extends', 'include', 'import')

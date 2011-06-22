@@ -29,7 +29,7 @@ class InterpreterTestCase(TemplateTestCase):
     interpreter_state_class = BasicInterpreterState
 
     def make_interpreter_state(self, config, ctx, info=None):
-        return self.interpreter_state_class(config, info=info, view=ctx)
+        return self.interpreter_state_class(config, info=info, vars=ctx)
 
     def make_interpreter(self, config):
         return Interpreter(config)
@@ -73,8 +73,8 @@ class InterpreterTestCase(TemplateTestCase):
         class CustomConfig(Config):
             def get_template(self, name):
                 return _SimpleTemplate(name, templates[name], test_case)
-            def yield_from_template(self, template, info, view=None):
-                return template.test_case.evaluate(template.node, ctx=view,
+            def yield_from_template(self, template, info, vars=None):
+                return template.test_case.evaluate(template.node, ctx=vars,
                                                    config=self, info=info)
             def iter_template_blocks(self, template):
                 intrptr = Interpreter(self)

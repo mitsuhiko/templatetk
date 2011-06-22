@@ -49,5 +49,13 @@ class RuntimeState(object):
         self.config = config
         self.info = self.runtime_info_class(self.config, template_name)
 
-    def resolve_var(self, name):
-        return self.context[name]
+    def lookup_var(self, name):
+        """The compiled code will try to find unknown variables with the
+        help of this function.  This is the bytecode compiled equivalent
+        of :meth:`templatetk.interpreter.InterpreterState.resolve_var` but
+        only called for variables that are not yet resolved.
+        """
+        try:
+            return self.context[name]
+        except KeyError:
+            return self.config.undefined_variable(name)
