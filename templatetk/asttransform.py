@@ -105,8 +105,8 @@ class FrameState(object):
         return local_identifier
 
 
-def to_ast(node, config):
-    transformer = ASTTransformer(config)
+def to_ast(node):
+    transformer = ASTTransformer(node.config)
     return transformer.transform(node)
 
 

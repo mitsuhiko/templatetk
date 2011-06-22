@@ -45,6 +45,11 @@ def from_sexpr(sexpr):
     return rv
 
 
+def compile_ast(ast, filename='<string>'):
+    """Compiles an AST node to bytecode"""
+    return compile(ast, filename, 'exec')
+
+
 def debug_ast(node):
     """Pretty prints the s-expression of an ast node."""
     from pprint import pformat
