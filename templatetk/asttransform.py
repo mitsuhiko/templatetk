@@ -153,6 +153,22 @@ class ASTTransformer(NodeVisitor):
     def make_target_context(self, ctx):
         return _context_target_map[ctx]()
 
+    def make_const(self, val, fstate):
+        if isinstance(val, (int, float, long)):
+            return ast.Num(val)
+        elif isinstance(val, basestring):
+            return ast.Str(val)
+        elif isinstance(val, tuple):
+            return ast.Tuple([self.visit(x, fstate) for x in val])
+        elif isinstance(val, list):
+            return ast.List([self.visit(x, fstate) for x in val])
+        elif isinstance(val, dict):
+            return ast.Dict(self.make_const(val.keys(), fstate),
+                            self.make_const(val.values(), fstate))
+        elif val in (None, True, False):
+            return ast.Name(str(val), ast.Load())
+        assert 0, 'Unsupported constant value for compiler'
+
     def inject_scope_code(self, fstate, body):
         before = []
         for alias, old_name in fstate.required_aliases.iteritems():
@@ -177,9 +193,8 @@ class ASTTransformer(NodeVisitor):
         return fix_missing_locations(rv)
 
     def visit_Output(self, node, fstate):
-        for child in node.nodes:
-            yield ast.Expr(ast.Yield(self.make_call('config', 'to_unicode',
-                [child], fstate), lineno=child.lineno))
+        return [ast.Expr(ast.Yield(self.make_call('config', 'to_unicode',
+                [child], fstate), lineno=child.lineno)) for child in node.nodes]
 
     def visit_For(self, node, fstate):
         loop_fstate = fstate.derive()
@@ -187,7 +202,7 @@ class ASTTransformer(NodeVisitor):
         iter = self.visit(node.iter, fstate)
         did_iterate = self.ident_manager.temporary()
         rv = ast.For(target, iter, [ast.Assign([ast.Name(did_iterate, ast.Store())],
-                                               ast.Name('True', ast.Load()))], [],
+                                                ast.Name('True', ast.Load()))], [],
                      lineno=node.lineno)
         rv.body.extend(self.visit_block(node.body, loop_fstate))
         self.inject_scope_code(loop_fstate, rv.body)
@@ -206,15 +221,4 @@ class ASTTransformer(NodeVisitor):
         return ast.Assign([target], expr, lineno=node.lineno)
 
     def visit_Const(self, node, fstate):
-        val = node.value
-        if isinstance(val, (int, float, long)):
-            return ast.Num(val)
-        elif isinstance(val, basestring):
-            return ast.Str(val)
-        elif isinstance(val, tuple):
-            return ast.Tuple([self.visit(x, fstate) for x in val])
-        elif isinstance(val, list):
-            return ast.List([self.visit(x, fstate) for x in val])
-        elif val in (None, True, False):
-            return ast.Name(str(val), ast.Load())
-        assert 0, 'Unsupported constant value for compiler'
+        return self.make_const(node.value, fstate)
