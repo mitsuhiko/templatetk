@@ -49,6 +49,10 @@ class RuntimeState(object):
         self.config = config
         self.info = self.runtime_info_class(self.config, template_name)
 
+    def export_var(self, name, value):
+        """Called by the runtime for toplevel assignments."""
+        self.info.exports[name] = value
+
     def lookup_var(self, name):
         """The compiled code will try to find unknown variables with the
         help of this function.  This is the bytecode compiled equivalent

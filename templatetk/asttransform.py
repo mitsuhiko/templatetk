@@ -73,7 +73,7 @@ class IdentManager(object):
 class FrameState(object):
 
     def __init__(self, config, parent=None, scope='soft',
-                 ident_manager=None):
+                 ident_manager=None, root=False):
         assert scope in ('soft', 'hard'), 'unknown scope type'
         self.config = config
         self.parent = parent
@@ -82,6 +82,7 @@ class FrameState(object):
         self.required_aliases = {}
         self.requires_lookup = {}
         self.ident_manager = ident_manager
+        self.root = root
 
     def derive(self, scope='soft'):
         return self.__class__(self.config, self, scope, self.ident_manager)
@@ -134,11 +135,9 @@ class ASTTransformer(NodeVisitor):
                     result.extend(rv)
         return result
 
-    def make_call(self, name, method, args, fstate):
+    def make_call(self, name, method, args):
         return ast.Call(ast.Attribute(ast.Name(name, ast.Load()),
-                        method, ast.Load()),
-                        [self.visit(x, fstate) for x in (args or ())], [],
-                        None, None)
+                        method, ast.Load()), args, [], None, None)
 
     def make_render_func(self, name, lineno=None):
         body = [ast.Assign([ast.Name('config', ast.Store())],
@@ -176,13 +175,14 @@ class ASTTransformer(NodeVisitor):
         for target, sourcename in fstate.requires_lookup.iteritems():
             before.append(ast.Assign([ast.Name(target, ast.Store())],
                 self.make_call('rtstate', 'lookup_var',
-                               [nodes.Const(sourcename)], fstate)))
+                               [ast.Str(sourcename)])))
 
         body[:] = before + body
 
     def visit_Template(self, node, fstate):
         assert fstate is None, 'framestate passed to template visitor'
-        fstate = FrameState(self.config, ident_manager=self.ident_manager)
+        fstate = FrameState(self.config, ident_manager=self.ident_manager,
+                            root=True)
         rv = ast.Module(lineno=1)
         root = self.make_render_func('root')
         root.body.extend(self.visit_block(node.body, fstate))
@@ -192,7 +192,8 @@ class ASTTransformer(NodeVisitor):
 
     def visit_Output(self, node, fstate):
         return [ast.Expr(ast.Yield(self.make_call('config', 'to_unicode',
-                [child], fstate), lineno=child.lineno)) for child in node.nodes]
+                [self.visit(child, fstate)]), lineno=child.lineno))
+                for child in node.nodes]
 
     def visit_For(self, node, fstate):
         loop_fstate = fstate.derive()
@@ -216,7 +217,10 @@ class ASTTransformer(NodeVisitor):
     def visit_Assign(self, node, fstate):
         target = self.visit(node.target, fstate)
         expr = self.visit(node.node, fstate)
-        return ast.Assign([target], expr, lineno=node.lineno)
+        if fstate.root and isinstance(target, ast.Name):
+            yield ast.Expr(self.make_call('rtstate', 'export_var',
+                                          [ast.Str(target.id), expr]))
+        yield ast.Assign([target], expr, lineno=node.lineno)
 
     def visit_Const(self, node, fstate):
         return self.make_const(node.value, fstate)
