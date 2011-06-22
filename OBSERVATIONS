@@ -87,3 +87,12 @@ Possible Counters
 -   Django adopts the same semantics as the other environments for
     escaping.  That would also give it the speedup of markupsafe for the
     escaping operations.
+
+Other Things
+------------
+
+-   ast.fix_missing_locations only sets actually missing locations, not
+    locations that are `None`.  This should be changed as the latter is
+    quite useful and in fact required by our internal toolchain.
+
+    --> fix in cpython for 3.3
