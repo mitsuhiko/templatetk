@@ -90,7 +90,7 @@ class FrameState(object):
         for idmap in self.ident_manager.iter_identifier_maps(self):
             if name in idmap:
                 local_identifier = idmap[name]
-                if idmap is not self.local_identifiers:
+                if idmap is not self.local_identifiers and ctx != 'load':
                     old = local_identifier
                     self.local_identifiers[name] = local_identifier = \
                         self.ident_manager.override(name)
@@ -185,6 +185,11 @@ class ASTTransformer(NodeVisitor):
         name = fstate.lookup_name(node.name)
         ctx = self.make_target_context(node.ctx)
         return ast.Name(name, ctx)
+
+    def visit_Assign(self, node, fstate):
+        target = self.visit(node.target, fstate)
+        expr = self.visit(node.node, fstate)
+        return ast.Assign(target, expr, lineno=node.lineno)
 
     def visit_Const(self, node, fstate):
         val = node.value
