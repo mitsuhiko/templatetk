@@ -92,6 +92,17 @@ Would turn into something like this::
     for l_a_4 in l_y_3:
         print l_a_4
 
+Unicode Identifiers
+-------------------
+
+-   Jinja2 limits itself to ASCII identifiers under Python 2 which
+    simplifies a lot of handling internally, Django however supports non
+    unicode identifiers because the parser never limited it to be ASCII
+    only and the strings coerce nicely.  The question now is if this is
+    something we should continue to support or not.  Generally it would be
+    possible, but it requires to encode the identifiers with something
+    (hexlify for instance).
+
 Jinja2 Long-Term Todo List that Might Be Worth Considering
 ----------------------------------------------------------
 
