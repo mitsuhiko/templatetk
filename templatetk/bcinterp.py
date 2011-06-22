@@ -13,6 +13,7 @@ from types import CodeType
 
 from .asttransform import to_ast
 from .astutil import compile_ast
+from .runtime import RuntimeInfo
 from .nodes import Node
 
 
@@ -41,10 +42,12 @@ def run_bytecode(code_or_node, filename=None):
 
 
 class RuntimeState(object):
+    runtime_info_class = RuntimeInfo
 
-    def __init__(self, context, config):
+    def __init__(self, context, config, template_name):
         self.context = context
         self.config = config
+        self.info = self.runtime_info_class(self.config, template_name)
 
     def resolve_var(self, name):
         return self.context[name]

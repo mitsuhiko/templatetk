@@ -12,28 +12,6 @@ from .exceptions import BlockNotFoundException, BlockLevelOverflowException, \
      TemplateNotFound, TemplatesNotFound
 
 
-class ContextView(object):
-    """If one template includes another one and still wants to give read
-    access to the variables from the other template this class can be
-    passed there and give a view of the context of another frame.
-    """
-
-    def __init__(self, config):
-        self.config = config
-
-    def resolve_var(self, key):
-        raise NotImplementedError('Cannot resolve variables in context')
-
-    def iter_vars(self):
-        raise NotImplementedError('Cannot list variables')
-
-    def __getitem__(self, key):
-        rv = self.resolve_var(key)
-        if self.config.is_undefined(rv):
-            raise KeyError(key)
-        return rv
-
-
 class RuntimeInfo(object):
     """While the template engine is interpreting the ASTS or compiled
     code it has to keep a bunch of information around.  This does not

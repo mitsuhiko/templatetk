@@ -14,7 +14,7 @@ from itertools import izip, chain
 from contextlib import contextmanager
 
 from .nodeutils import NodeVisitor
-from .runtime import RuntimeInfo, ContextView
+from .runtime import RuntimeInfo
 from .exceptions import TemplateNotFound
 from . import nodes
 
@@ -82,8 +82,7 @@ class InterpreterState(object):
         return self.runtime_info_class(self.config, template_name)
 
     def evaluate_block(self, node, level=1):
-        view = ContextView(self)
-        return self.info.evaluate_block(node.name, level, view)
+        return self.info.evaluate_block(node.name, level, self)
 
     @contextmanager
     def frame(self):
@@ -99,37 +98,23 @@ class InterpreterState(object):
     def pop_frame(self):
         pass
 
-    def assign_var(self, key, value):
-        raise NotImplementedError('assigning variables')
+    def __getitem__(self, key):
+        raise NotImplementedError()
 
     def resolve_var(self, key):
-        raise NotImplementedError('resolving variables')
+        try:
+            return self.__getitem__(key)
+        except KeyError:
+            return self.config.undefined_variable(key)
 
-    def iter_vars(self):
-        raise NotImplementedError('listing variables')
+    def assign_var(self, key, value):
+        raise NotImplementedError('assigning variables')
 
     def get_template(self, template_name):
         return self.info.get_template(template_name)
 
     def get_or_select_template(self, template_name_or_list):
         return self.info.get_or_select_template(template_name_or_list)
-
-
-class ContextFrameDict(dict, ContextView):
-
-    def __init__(self, config):
-        self.config = config
-
-    def resolve_var(self, key):
-        try:
-            return self[key]
-        except KeyError:
-            return self.config.undefined_variable(key)
-
-    def iter_vars(self):
-        return self.iterkeys()
-
-    __getitem__ = dict.__getitem__
 
 
 class BasicInterpreterState(InterpreterState):
@@ -143,7 +128,7 @@ class BasicInterpreterState(InterpreterState):
         self.toplevel = self.context[-1]
 
     def push_frame(self):
-        self.context.append(ContextFrameDict(self.config))
+        self.context.append({})
 
     def pop_frame(self):
         self.context.pop()
@@ -154,32 +139,13 @@ class BasicInterpreterState(InterpreterState):
         if ctx is self.toplevel:
             self.info.exports[key] = value
 
-    def resolve_var(self, key):
+    def __getitem__(self, key):
         for d in reversed(self.context):
             try:
                 return d[key]
             except KeyError:
                 continue
-        return self.config.undefined_variable(key)
-
-    def iter_vars(self):
-        rv = set()
-        for cfd in self.context:
-            rv.update(cfd.iter_vars())
-        return iter(rv)
-
-
-class InterpreterStateContextView(ContextView):
-
-    def __init__(self, state):
-        ContextView.__init__(self, state.config)
-        self.state = state
-
-    def resolve_var(self, key):
-        return self.state.resolve_var(key)
-
-    def iter_vars(self):
-        return self.state.iter_vars()
+        raise KeyError(key)
 
 
 class Interpreter(NodeVisitor):
@@ -439,10 +405,9 @@ class Interpreter(NodeVisitor):
     def visit_Extends(self, node, state):
         template_name = self.visit(node.template, state)
         template = state.get_template(template_name)
-        context_view = InterpreterStateContextView(state)
         info = state.info.make_info(template, template_name, 'extends')
         for event in state.config.yield_from_template(template, info,
-                                                      context_view):
+                                                      self):
             yield event
         raise StopExecutionException()
 
@@ -461,7 +426,7 @@ class Interpreter(NodeVisitor):
                 raise
             return
         if node.with_context:
-            context_view = InterpreterStateContextView(state)
+            context_view = self
         else:
             context_view = None
         info = state.info.make_info(template, template_name, 'include')
@@ -473,7 +438,7 @@ class Interpreter(NodeVisitor):
         template_name = self.visit(node.template, state)
         template = state.get_template(template_name)
         if node.with_context:
-            context_view = InterpreterStateContextView(state)
+            context_view = self
         else:
             context_view = None
         info = state.info.make_info(template, template_name, 'import')

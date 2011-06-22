@@ -35,7 +35,7 @@ class CompiledTemplate(Template):
         self.root_func = namespace['root']
 
     def execute(self, context):
-        rtstate = RuntimeState(context, self.config)
+        rtstate = RuntimeState(context, self.config, self.name)
         return self.root_func(rtstate)
 
 
