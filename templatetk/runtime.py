@@ -12,16 +12,6 @@ from .exceptions import BlockNotFoundException, BlockLevelOverflowException, \
      TemplateNotFound, TemplatesNotFound
 
 
-class TemplateInterface(object):
-    """A interface recommendation for template object implementations.
-    This is not enforced anywhere in the system but the default
-    implementation of the interpreter state follows this interface.
-    """
-
-    def generate_root(self, info):
-        raise NotImplementedError()
-
-
 class ContextView(object):
     """If one template includes another one and still wants to give read
     access to the variables from the other template this class can be
