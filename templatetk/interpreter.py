@@ -140,6 +140,7 @@ class BasicInterpreterState(InterpreterState):
         if view is not None:
             self.context.append(view)
         self.push_frame()
+        self.toplevel = self.context[-1]
 
     def push_frame(self):
         self.context.append(ContextFrameDict(self.config))
@@ -148,7 +149,10 @@ class BasicInterpreterState(InterpreterState):
         self.context.pop()
 
     def assign_var(self, key, value):
-        self.context[-1][key] = value
+        ctx = self.context[-1]
+        ctx[key] = value
+        if ctx is self.toplevel:
+            self.info.exports[key] = value
 
     def resolve_var(self, key):
         for d in reversed(self.context):
@@ -436,7 +440,7 @@ class Interpreter(NodeVisitor):
         template_name = self.visit(node.template, state)
         template = state.get_template(template_name)
         context_view = InterpreterStateContextView(state)
-        info = state.info.make_inheritance_info(template, template_name)
+        info = state.info.make_info(template, template_name, 'extends')
         for event in state.config.yield_from_template(template, info,
                                                       context_view):
             yield event
@@ -460,13 +464,35 @@ class Interpreter(NodeVisitor):
             context_view = InterpreterStateContextView(state)
         else:
             context_view = None
-        info = state.info.make_include_info(template, template_name)
+        info = state.info.make_info(template, template_name, 'include')
         for event in state.config.yield_from_template(template, info,
                                                       context_view):
             yield event
 
+    def resolve_import(self, node, state):
+        template_name = self.visit(node.template, state)
+        template = state.get_template(template_name)
+        if node.with_context:
+            context_view = InterpreterStateContextView(state)
+        else:
+            context_view = None
+        info = state.info.make_info(template, template_name, 'import')
+        gen = state.config.yield_from_template(template, info,
+                                               context_view)
+        return info.make_module(gen)
+
     def visit_Import(self, node, state):
-        raise NotImplementedError()
+        module = self.resolve_import(node, state)
+        assign_to_state(node.target, module, state)
+        return empty_iter
 
     def visit_FromImport(self, node, state):
-        raise NotImplementedError()
+        module = self.resolve_import(node, state)
+        for name in node.names:
+            if isinstance(name, tuple):
+                name, alias = name
+            else:
+                alias = name
+            imported_object = state.config.resolve_from_import(module, name)
+            state.assign_var(alias, imported_object)
+        return empty_iter

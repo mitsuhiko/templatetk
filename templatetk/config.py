@@ -93,3 +93,9 @@ class Config(object):
 
     def iter_template_blocks(self, template):
         raise NotImplementedError('Cannot get blocks from template')
+
+    def make_module(self, template_name, exports, body):
+        raise NotImplementedError('Cannot create modules')
+
+    def resolve_from_import(self, module, attribute):
+        return self.getattr(module, attribute)

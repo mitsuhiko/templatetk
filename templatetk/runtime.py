@@ -60,6 +60,7 @@ class RuntimeInfo(object):
         self.tests = config.get_tests()
         self.block_executers = {}
         self.template_cache = {}
+        self.exports = {}
 
     def get_template(self, template_name):
         """Gets a template from cache or if it's not there, it will newly
@@ -75,7 +76,7 @@ class RuntimeInfo(object):
         return rv
 
     def select_template(self, template_names):
-        for name in templates_names:
+        for name in template_names:
             try:
                 return self.get_template(name)
             except TemplateNotFound:
@@ -120,15 +121,19 @@ class RuntimeInfo(object):
             raise BlockLevelOverflowException(name, level)
         return func(self, view)
 
-    def make_include_info(self, template, template_name):
+    def make_info(self, template, template_name, behavior='extends'):
+        assert behavior in ('extends', 'include', 'import')
         rv = self.__class__(self.config, template_name)
         rv.template_cache = self.template_cache
+        if behavior == 'extends':
+            rv.block_executers.update(self.block_executers)
         return rv
 
-    def make_inheritance_info(self, template, template_name):
-        rv = self.make_include_info(template, template_name)
-        rv.block_executers.update(self.block_executers)
-        return rv
+    def make_module(self, gen):
+        """Make this info and evaluated template generator into a module."""
+        body = list(gen)
+        return self.config.make_module(self.template_name, self.exports,
+                                       body)
 
 
 class LoopContextBase(object):

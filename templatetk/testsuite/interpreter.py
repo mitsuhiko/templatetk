@@ -523,6 +523,13 @@ class LoaderTestCase(InterpreterTestCase):
     def make_inheritance_config(self, templates):
         test_case = self
 
+        class Module(object):
+
+            def __init__(self, name, exports, contents):
+                self.__dict__.update(exports)
+                self.__name__ = name
+                self.body = contents
+
         class CustomConfig(Config):
             def get_template(self, name):
                 return _SimpleTemplate(name, templates[name], test_case)
@@ -533,6 +540,8 @@ class LoaderTestCase(InterpreterTestCase):
                 intrptr = Interpreter(self)
                 return intrptr.iter_blocks(template.node,
                                            test_case.interpreter_state_class)
+            def make_module(self, template_name, exports, body):
+                return Module(template_name, exports, ''.join(body))
         return CustomConfig()
 
 
@@ -585,6 +594,48 @@ class IncludeTestCase(LoaderTestCase):
             '1\nA\n2', config=config)
 
 
+class ImportTestCase(LoaderTestCase):
+
+    def test_basic_imports(self):
+        n = nodes
+
+        index_template = n.Template([
+            n.Import(n.Const('import.html'), n.Name('foo', 'store'), True),
+            n.Output([n.Getattr(n.Name('foo', 'load'), n.Const('bar'), 'load')])
+        ])
+        import_template = n.Template([
+            n.Assign(n.Name('bar', 'store'), n.Const(42))
+        ])
+
+        config = self.make_inheritance_config({
+            'index.html':       index_template,
+            'import.html':      import_template
+        })
+
+        self.assert_result_matches(index_template, dict(),
+            '42', config=config)
+
+    def test_from_imports(self):
+        n = nodes
+
+        index_template = n.Template([
+            n.FromImport(n.Const('import.html'), ['foo', ('bar', 'x')], True),
+            n.Output([n.Name('foo', 'load'), n.Const('|'), n.Name('x', 'load')])
+        ])
+        import_template = n.Template([
+            n.Assign(n.Name('foo', 'store'), n.Const(42)),
+            n.Assign(n.Name('bar', 'store'), n.Const(23))
+        ])
+
+        config = self.make_inheritance_config({
+            'index.html':       index_template,
+            'import.html':      import_template
+        })
+
+        self.assert_result_matches(index_template, dict(),
+            '42|23', config=config)
+
+
 def suite():
     import unittest
     suite = unittest.TestSuite()
@@ -594,4 +645,5 @@ def suite():
     suite.addTest(unittest.makeSuite(ExpressionTestCase))
     suite.addTest(unittest.makeSuite(InheritanceTestCase))
     suite.addTest(unittest.makeSuite(IncludeTestCase))
+    suite.addTest(unittest.makeSuite(ImportTestCase))
     return suite
