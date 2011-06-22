@@ -92,6 +92,14 @@ Would turn into something like this::
     for l_a_4 in l_y_3:
         print l_a_4
 
+The downside is that we're currently not setting those to `None` or
+something similar after being used.  This means that after a scope was
+"left" the variables stick around.  I think it's the better idea because
+templates don't run for long so the little memory overhead does not matter
+too much.  The upside is that people will not start to rely on reference
+counting because we basically keep references around for a long time
+(until the function returns).
+
 Unicode Identifiers
 -------------------
 
