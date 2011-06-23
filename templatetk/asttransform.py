@@ -28,6 +28,7 @@ try:
     import ast
     have_ast = True
 except ImportError:
+    import _ast as ast
     have_ast = False
 
 
@@ -35,6 +36,18 @@ _context_target_map = {
     'store':        ast.Store,
     'param':        ast.Param,
     'load':         ast.Load
+}
+
+
+_cmpop_to_ast = {
+    'eq':       ast.Eq,
+    'ne':       ast.NotEq,
+    'gt':       ast.Gt,
+    'gteq':     ast.GtE,
+    'lt':       ast.Lt,
+    'lteq':     ast.LtE,
+    'in':       ast.In,
+    'notin':    ast.NotIn
 }
 
 
@@ -150,6 +163,9 @@ class ASTTransformer(NodeVisitor):
     def make_target_context(self, ctx):
         return _context_target_map[ctx]()
 
+    def make_cmp_op(self, opname):
+        return _cmpop_to_ast[opname]()
+
     def make_const(self, val, fstate):
         if isinstance(val, (int, float, long)):
             return ast.Num(val)
@@ -226,6 +242,9 @@ class ASTTransformer(NodeVisitor):
         self.inject_scope_code(condition_fstate, rv)
         return rv
 
+    def visit_ExprStmt(self, node, fstate):
+        return ast.Expr(self.visit(node.node, fstate), lineno=node.lineno)
+
     def visit_Name(self, node, fstate):
         name = fstate.lookup_name(node.name, node.ctx)
         ctx = self.make_target_context(node.ctx)
@@ -280,3 +299,67 @@ class ASTTransformer(NodeVisitor):
     def visit_Tuple(self, node, fstate):
         return ast.Tuple([self.visit(x, fstate) for x in node.args],
                          self.make_target_context(node.ctx))
+
+    def visit_List(self, node, fstate):
+        return ast.List([self.visit(x, fstate) for x in node.args],
+                        self.make_target_context(node.ctx))
+
+    def visit_Dict(self, node, fstate):
+        keys = []
+        values = []
+        for pair in node.items:
+            keys.append(self.visit(pair.key, fstate))
+            values.append(self.visit(pair.value, fstate))
+        return ast.Dict(keys, values, lineno=node.lineno)
+
+    def visit_CondExpr(self, node, fstate):
+        test = self.visit(node.test, fstate)
+        true = self.visit(node.true, fstate)
+        false = self.visit(node.false, fstate)
+        return ast.IfExp(test, true, false, lineno=node.lineno)
+
+    def binexpr(operator):
+        def visitor(self, node, fstate):
+            a = self.visit(node.left, fstate)
+            b = self.visit(node.right, fstate)
+            return ast.BinOp(a, operator(), b, lineno=node.lineno)
+        return visitor
+
+    visit_Add = binexpr(ast.Add)
+    visit_Sub = binexpr(ast.Sub)
+    visit_Mul = binexpr(ast.Mult)
+    visit_Div = binexpr(ast.Div)
+    visit_FloorDiv = binexpr(ast.FloorDiv)
+    visit_Mod = binexpr(ast.Mod)
+    visit_Pow = binexpr(ast.Pow)
+    del binexpr
+
+    def visit_And(self, node, fstate):
+        left = self.visit(node.left, fstate)
+        right = self.visit(node.right, fstate)
+        return ast.BoolOp(ast.And(), [left, right], lineno=node.lineno)
+
+    def visit_Or(self, node, fstate):
+        left = self.visit(node.left, fstate)
+        right = self.visit(node.right, fstate)
+        return ast.BoolOp(ast.Or(), [left, right], lineno=node.lineno)
+
+    def visit_Compare(self, node, fstate):
+        left = self.visit(node.expr, fstate)
+        ops = []
+        comparators = []
+        for op in node.ops:
+            ops.append(self.make_cmp_op(op.op))
+            comparators.append(self.visit(op.expr, fstate))
+        return ast.Compare(left, ops, comparators, lineno=node.lineno)
+
+    def unary(operator):
+        def visitor(self, node, fstate):
+            return ast.UnaryOp(operator(), self.visit(node.node, fstate),
+                               lineno=node.lineno)
+        return visitor
+
+    visit_Pos = unary(ast.UAdd)
+    visit_Neg = unary(ast.USub)
+    visit_Not = unary(ast.Not)
+    del unary
