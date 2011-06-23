@@ -245,6 +245,12 @@ class ASTTransformer(NodeVisitor):
     def visit_ExprStmt(self, node, fstate):
         return ast.Expr(self.visit(node.node, fstate), lineno=node.lineno)
 
+    def visit_Scope(self, node, fstate):
+        scope_fstate = fstate.derive()
+        rv = list(self.visit_block(node.body, scope_fstate))
+        self.inject_scope_code(scope_fstate, rv)
+        return rv
+
     def visit_Name(self, node, fstate):
         name = fstate.lookup_name(node.name, node.ctx)
         ctx = self.make_target_context(node.ctx)
@@ -297,7 +303,7 @@ class ASTTransformer(NodeVisitor):
                               lineno=node.lineno)
 
     def visit_Tuple(self, node, fstate):
-        return ast.Tuple([self.visit(x, fstate) for x in node.args],
+        return ast.Tuple([self.visit(x, fstate) for x in node.items],
                          self.make_target_context(node.ctx))
 
     def visit_List(self, node, fstate):

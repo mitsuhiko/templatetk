@@ -71,8 +71,12 @@ class IfConditionTestCase(object):
         n = nodes
 
         template = n.Template([
-            n.If(n.Name('value', 'load'), [n.Const('body')],
-                 [n.Const('else')])])
+            n.If(n.Name('value', 'load'), [n.Output([n.Const('body')])],
+                 [n.Output([n.Const('else')])])])
+
+        from ..astutil import debug_ast
+        from ..asttransform import to_ast
+        print debug_ast(to_ast(template))
 
         self.assert_result_matches(template, dict(value=True), 'body')
         self.assert_result_matches(template, dict(value=False), 'else')

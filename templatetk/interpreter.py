@@ -414,6 +414,7 @@ class Interpreter(NodeVisitor):
 
     def visit_ExprStmt(self, node, state):
         self.visit(node.node, state)
+        return empty_iter
 
     def visit_Block(self, node, state):
         with state.frame():
