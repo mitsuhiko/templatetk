@@ -242,14 +242,20 @@ class ASTTransformer(NodeVisitor):
     def visit_Getattr(self, node, fstate):
         obj = self.visit(node.node, fstate)
         attr = self.visit(node.attr, fstate)
-        return self.make_call('config', 'getattr', [obj, attr],
-                              lineno=node.lineno)
+        if node.ctx == 'load':
+            return self.make_call('config', 'getattr', [obj, attr],
+                                  lineno=node.lineno)
+        return ast.Attribute(obj, attr, self.make_target_context(node.ctx),
+                             lineno=node.lineno)
 
     def visit_Getitem(self, node, fstate):
         obj = self.visit(node.node, fstate)
         arg = self.visit(node.arg, fstate)
-        return self.make_call('config', 'getitem', [obj, arg],
-                              lineno=node.lineno)
+        if node.ctx == 'load':
+            return self.make_call('config', 'getitem', [obj, arg],
+                                  lineno=node.lineno)
+        return ast.Subscript(obj, arg, self.make_target_context(node.ctx),
+                             lineno=node.lineno)
 
     def visit_Call(self, node, fstate):
         obj = self.visit(node.node, fstate)
@@ -270,3 +276,7 @@ class ASTTransformer(NodeVisitor):
     def visit_TemplateData(self, node, fstate):
         return self.make_call('config', 'markup_type', [ast.Str(node.data)],
                               lineno=node.lineno)
+
+    def visit_Tuple(self, node, fstate):
+        return ast.Tuple([self.visit(x, fstate) for x in node.args],
+                         self.make_target_context(node.ctx))
