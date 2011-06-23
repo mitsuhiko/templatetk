@@ -9,6 +9,7 @@
     :license: BSD, see LICENSE for more details.
 """
 import ast
+import sys
 
 
 def to_sexpr(node):
@@ -53,7 +54,18 @@ def compile_ast(ast, filename='<string>'):
 def debug_ast(node):
     """Pretty prints the s-expression of an ast node."""
     from pprint import pformat
-    return pformat(to_sexpr(node))
+    try:
+        from pygments import highlight
+        from pygments.formatters import TerminalFormatter
+        from pygments.lexers import PythonLexer
+        have_pygments = True
+    except ImportError:
+        have_pygments = False
+    indented = pformat(to_sexpr(node))
+    if have_pygments:
+        indented = highlight(indented, formatter=TerminalFormatter(),
+                             lexer=PythonLexer()).rstrip()
+    print >> sys.stderr, indented
 
 
 def fix_missing_locations(node):
