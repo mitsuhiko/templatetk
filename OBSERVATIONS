@@ -108,3 +108,9 @@ Other Things
     quite useful and in fact required by our internal toolchain.
 
     --> fix in cpython for 3.3
+
+-   The AST internal validation often yields weird results.  This could be
+    improved.  For instance passing a list where an expression is required
+    will give the error 'missing field "lineno"' instead of complaining
+    that the type is not correct.  Generally the location of the error
+    does not exit which makes it hard to do that.
