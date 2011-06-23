@@ -22,7 +22,6 @@ from __future__ import with_statement
 
 from .nodeutils import NodeVisitor
 from .astutil import fix_missing_locations
-from . import nodes
 
 
 try:
@@ -135,9 +134,10 @@ class ASTTransformer(NodeVisitor):
                     result.extend(rv)
         return result
 
-    def make_call(self, name, method, args):
+    def make_call(self, name, method, args, lineno=None):
         return ast.Call(ast.Attribute(ast.Name(name, ast.Load()),
-                        method, ast.Load()), args, [], None, None)
+                        method, ast.Load()), args, [], None, None,
+                        lineno=lineno)
 
     def make_render_func(self, name, lineno=None):
         body = [ast.Assign([ast.Name('config', ast.Store())],
@@ -209,6 +209,23 @@ class ASTTransformer(NodeVisitor):
         return [ast.Assign([ast.Name(did_iterate, ast.Store())],
                            ast.Name('False', ast.Load())), rv]
 
+    def visit_Continue(self, node, fstate):
+        return [ast.Continue(lineno=node.lineno)]
+
+    def visit_Break(self, node, fstate):
+        return [ast.Break(lineno=node.lineno)]
+
+    def visit_If(self, node, fstate):
+        test = self.visit(node.test, fstate)
+        condition_fstate = fstate.derive()
+        body = self.visit_block(node.body, condition_fstate)
+        else_ = []
+        if node.else_:
+            else_ = self.visit_block(node.else_, condition_fstate)
+        rv = [ast.If(test, body, else_)]
+        self.inject_scope_code(condition_fstate, rv)
+        return rv
+
     def visit_Name(self, node, fstate):
         name = fstate.lookup_name(node.name, node.ctx)
         ctx = self.make_target_context(node.ctx)
@@ -222,5 +239,34 @@ class ASTTransformer(NodeVisitor):
                                           [ast.Str(target.id), expr]))
         yield ast.Assign([target], expr, lineno=node.lineno)
 
+    def visit_Getattr(self, node, fstate):
+        obj = self.visit(node.node, fstate)
+        attr = self.visit(node.attr, fstate)
+        return self.make_call('config', 'getattr', [obj, attr],
+                              lineno=node.lineno)
+
+    def visit_Getitem(self, node, fstate):
+        obj = self.visit(node.node, fstate)
+        arg = self.visit(node.arg, fstate)
+        return self.make_call('config', 'getitem', [obj, arg],
+                              lineno=node.lineno)
+
+    def visit_Call(self, node, fstate):
+        obj = self.visit(node.node, fstate)
+        args = [self.visit(x, fstate) for x in node.args]
+        kwargs = [(self.visit(k, fstate), self.visit(v, fstate))
+                  for k, v in node.kwargs]
+        dyn_args = dyn_kwargs = None
+        if node.dyn_args is not None:
+            dyn_args = self.visit(dyn_args, fstate)
+        if node.dyn_kwargs is not None:
+            dyn_kwargs = self.visit(dyn_kwargs, fstate)
+        return ast.Call(obj, args, kwargs, dyn_args, dyn_kwargs,
+                        lineno=node.lineno)
+
     def visit_Const(self, node, fstate):
         return self.make_const(node.value, fstate)
+
+    def visit_TemplateData(self, node, fstate):
+        return self.make_call('config', 'markup_type', [ast.Str(node.data)],
+                              lineno=node.lineno)
