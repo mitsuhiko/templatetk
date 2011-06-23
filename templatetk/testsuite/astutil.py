@@ -23,7 +23,7 @@ class SExprTestCase(TemplateTestCase):
             foo = 1
             bar = 2
             meh = [1, 2, bar, foo]
-            return [-x for x in meh]
+            return [-x for x in meh]\
         ''')
 
         expected = ('Module',
@@ -81,7 +81,7 @@ class SExprTestCase(TemplateTestCase):
             class Foo(object):
                 pass
 
-            return [-x for x in meh], Foo()
+            return [-x for x in meh], Foo()\
         ''')
 
         node2 = astutil.from_sexpr(astutil.to_sexpr(node))
