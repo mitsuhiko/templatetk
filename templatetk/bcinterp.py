@@ -9,6 +9,8 @@
     :copyright: (c) Copyright 2011 by Armin Ronacher.
     :license: BSD, see LICENSE for more details.
 """
+import os
+import sys
 from types import CodeType
 from itertools import izip
 
@@ -21,6 +23,15 @@ def compile_ast(ast, filename='<string>'):
     """Compiles an AST node to bytecode"""
     if isinstance(filename, unicode):
         filename = filename.encode('utf-8')
+
+    # XXX: this is here for debugging purposes during development.
+    if os.environ.get('TEMPLATETK_AST_DEBUG'):
+        from astutil.codegen import to_source
+        print >> sys.stderr, '-' * 80
+        ast = to_source(ast)
+        print >> sys.stderr, ast
+        print >> sys.stderr, '-' * 80
+
     return compile(ast, filename, 'exec')
 
 
