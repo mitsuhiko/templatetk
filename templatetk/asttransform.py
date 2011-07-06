@@ -266,20 +266,33 @@ class ASTTransformer(NodeVisitor):
            isinstance(node.target, nodes.Tuple):
             iter_name = self.ident_manager.temporary()
             target = ast.Name(iter_name, ast.Store())
-            body.append(ast.Assign([self.visit(node.target, fstate)],
+            body.append(ast.Assign([self.visit(node.target, loop_fstate)],
                 ast.Call(ast.Name('lenient_unpack_helper', ast.Load()),
                          [ast.Name('config', ast.Load()),
                           ast.Name(iter_name, ast.Load()),
                           self.make_name_tuple(node.target)], [], None, None)))
         else:
-            target = self.visit(node.target, fstate)
+            target = self.visit(node.target, loop_fstate)
+
+        if self.config.forloop_parent_access:
+            parent = self.visit(nodes.Name(self.config.forloop_accessor,
+                                           'load'), fstate)
+        else:
+            parent = ast.Name('None', ast.Load())
 
         iter = self.visit(node.iter, fstate)
+        wrapped_iter = self.make_call('config', 'wrap_loop', [iter, parent])
+
+        loop_accessor = self.visit(nodes.Name(self.config.forloop_accessor,
+                                              'store'), loop_fstate)
+        tuple_target = ast.Tuple([target, loop_accessor], ast.Store())
+
         body.extend(self.visit_block(node.body, loop_fstate))
         self.inject_scope_code(loop_fstate, body)
         return [ast.Assign([ast.Name(did_iterate, ast.Store())],
                            ast.Name('False', ast.Load())),
-                ast.For(target, iter, body, [], lineno=node.lineno)]
+                ast.For(tuple_target, wrapped_iter, body, [],
+                        lineno=node.lineno)]
 
     def visit_Continue(self, node, fstate):
         return [ast.Continue(lineno=node.lineno)]
