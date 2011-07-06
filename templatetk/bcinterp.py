@@ -9,7 +9,9 @@
     :copyright: (c) Copyright 2011 by Armin Ronacher.
     :license: BSD, see LICENSE for more details.
 """
+import sys
 from types import CodeType
+from itertools import islice, izip
 
 from .asttransform import to_ast
 from .astutil import compile_ast
@@ -39,6 +41,45 @@ def run_bytecode(code_or_node, filename=None):
     namespace = {}
     exec code_or_node in namespace
     return namespace
+
+
+def recursive_make_undefined(config, targets):
+    result = []
+    for name in targets:
+        if isinstance(name, tuple):
+            result.append(recursive_make_undefined(config, name))
+        else:
+            result.append(config.undefined_variable(name))
+    return tuple(result)
+
+
+def _unpack_tuple_silent(config, values, targets):
+    for name, value in izip(targets, values):
+        if isinstance(name, tuple):
+            yield lenient_unpack_helper(config, value, name)
+        else:
+            yield value
+    diff = len(targets) - len(values)
+    for x in xrange(diff):
+        yield config.undefined_variable(targets[len(targets) + x - 1])
+
+
+def lenient_unpack_helper(config, iterable, targets):
+    """Can unpack tuples to target names without raising exceptions.  This
+    is used by the compiled as helper function in case the config demands
+    this behavior.
+    """
+    try:
+        values = tuple(iterable)
+    except TypeError:
+        if not config.allow_noniter_unpacking:
+            raise
+        return recursive_make_undefined(config, targets)
+
+    if config.strict_tuple_unpacking:
+        return values
+
+    return _unpack_tuple_silent(config, values, targets)
 
 
 class RuntimeState(object):

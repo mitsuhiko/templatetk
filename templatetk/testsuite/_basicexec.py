@@ -25,10 +25,16 @@ class _SimpleTemplate(object):
 class BasicExecTestCase(TemplateTestCase):
 
     def assert_result_matches(self, node, ctx, expected, config=None):
+        if config is None:
+            config = Config()
+        node.set_config(config)
         rv = u''.join(self.execute(node, ctx, config))
         self.assert_equal(rv, expected)
 
     def assert_template_fails(self, node, ctx, exception, config=None):
+        if config is None:
+            config = Config()
+        node.set_config(config)
         with self.assert_raises(exception):
             for event in self.execute(node, ctx, config):
                 pass
@@ -55,10 +61,28 @@ class BasicExecTestCase(TemplateTestCase):
                 return Module(template_name, exports, ''.join(body))
         return CustomConfig()
 
+    def find_ctx_config(self, ctx, config, node):
+        if config is None:
+            config = node.config
+            if config is None:
+                config = Config()
+        node.set_config(config)
+        if ctx is None:
+            ctx = {}
+        return ctx, config
+
     def execute(self, node, ctx=None, config=None, info=None):
-        raise NotImplementedError()
+        ctx, config = self.find_ctx_config(ctx, config, node)
+        return self._execute(node, ctx, config, info)
 
     def evaluate(self, node, ctx=None, config=None, info=None):
+        ctx, config = self.find_ctx_config(ctx, config, node)
+        return self._evaluate(node, ctx, config, info)
+
+    def _execute(self, node, ctx, config, info):
+        raise NotImplementedError()
+
+    def _evaluate(self, node, ctx, config, info):
         raise NotImplementedError()
 
     def iter_template_blocks(self, template, config):
@@ -73,10 +97,6 @@ class IfConditionTestCase(object):
         template = n.Template([
             n.If(n.Name('value', 'load'), [n.Output([n.Const('body')])],
                  [n.Output([n.Const('else')])])])
-
-        from ..astutil import debug_ast
-        from ..asttransform import to_ast
-        print debug_ast(to_ast(template))
 
         self.assert_result_matches(template, dict(value=True), 'body')
         self.assert_result_matches(template, dict(value=False), 'else')

@@ -14,26 +14,19 @@ from . import _basicexec
 
 from .. import nodes
 from ..bcinterp import run_bytecode, RuntimeState
-from ..config import Config
 
 
 class BCInterpTestCase(_basicexec.BasicExecTestCase):
 
     def get_exec_namespace(self, node, ctx, config):
-        if ctx is None:
-            ctx = {}
-        if config is None:
-            config = Config()
         rtstate = RuntimeState(ctx, config, 'dummy')
         return run_bytecode(node, '<dummy>'), rtstate
 
-    def execute(self, node, ctx=None, config=None, info=None):
+    def _execute(self, node, ctx, config, info):
         ns, rtstate = self.get_exec_namespace(node, ctx, config)
         return ns['root'](rtstate)
 
-    def evaluate(self, node, ctx=None, config=None, info=None):
-        if config is None:
-            config = Config()
+    def _evaluate(self, node, ctx, config, info):
         n = nodes
         node = n.Template(
             n.Assign(n.Name('__result__', 'store'), node), lineno=1

@@ -20,6 +20,7 @@
 """
 from __future__ import with_statement
 
+from . import nodes
 from .nodeutils import NodeVisitor
 from .astutil import fix_missing_locations
 
@@ -124,6 +125,7 @@ def to_ast(node):
 
 
 class ASTTransformer(NodeVisitor):
+    bcinterp_module = __name__.split('.')[0] + '.bcinterp'
 
     def __init__(self, config):
         NodeVisitor.__init__(self)
@@ -166,21 +168,46 @@ class ASTTransformer(NodeVisitor):
     def make_cmp_op(self, opname):
         return _cmpop_to_ast[opname]()
 
+    def make_name_tuple(self, target_tuple, as_ast=True):
+        assert isinstance(target_tuple, nodes.Tuple)
+        assert target_tuple.ctx in ('store', 'param')
+        def walk(obj):
+            rv = []
+            for node in obj.items:
+                if isinstance(node, nodes.Name):
+                    val = node.name
+                    if as_ast:
+                        val = ast.Str(val)
+                    rv.append(val)
+                elif isinstance(node, nodes.Tuple):
+                    rv.append(walk(node))
+                else:
+                    assert 0, 'unsupported assignment to %r' % node
+            if as_ast:
+                return ast.Tuple(rv, ast.Load())
+            return tuple(rv)
+        return walk(target_tuple)
+
     def make_const(self, val, fstate):
         if isinstance(val, (int, float, long)):
             return ast.Num(val)
         elif isinstance(val, basestring):
             return ast.Str(val)
         elif isinstance(val, tuple):
-            return ast.Tuple([self.visit(x, fstate) for x in val])
+            return ast.Tuple([self.make_const(x, fstate) for x in val])
         elif isinstance(val, list):
-            return ast.List([self.visit(x, fstate) for x in val])
+            return ast.List([self.make_const(x, fstate) for x in val],
+                            ast.Load())
         elif isinstance(val, dict):
             return ast.Dict(self.make_const(val.keys(), fstate),
                             self.make_const(val.values(), fstate))
         elif val in (None, True, False):
             return ast.Name(str(val), ast.Load())
         assert 0, 'Unsupported constant value for compiler'
+
+    def make_runtime_imports(self):
+        yield ast.ImportFrom(self.bcinterp_module,
+                             [ast.alias('*', None)], 0)
 
     def inject_scope_code(self, fstate, body):
         before = []
@@ -203,7 +230,7 @@ class ASTTransformer(NodeVisitor):
         root = self.make_render_func('root')
         root.body.extend(self.visit_block(node.body, fstate))
         self.inject_scope_code(fstate, root.body)
-        rv.body = [root]
+        rv.body = list(self.make_runtime_imports()) + [root]
         return fix_missing_locations(rv)
 
     def visit_Output(self, node, fstate):
@@ -213,17 +240,29 @@ class ASTTransformer(NodeVisitor):
 
     def visit_For(self, node, fstate):
         loop_fstate = fstate.derive()
-        target = self.visit(node.target, fstate)
-        iter = self.visit(node.iter, fstate)
         did_iterate = self.ident_manager.temporary()
-        rv = ast.For(target, iter, [ast.Assign([ast.Name(did_iterate, ast.Store())],
-                                                ast.Name('True', ast.Load()))], [],
-                     lineno=node.lineno)
-        rv.body.extend(self.visit_block(node.body, loop_fstate))
-        self.inject_scope_code(loop_fstate, rv.body)
-        # TODO: else_
+        body = [ast.Assign([ast.Name(did_iterate, ast.Store())],
+                           ast.Name('True', ast.Load()))]
+
+        if (fstate.config.allow_noniter_unpacking or
+            not fstate.config.strict_tuple_unpacking) and \
+           isinstance(node.target, nodes.Tuple):
+            iter_name = self.ident_manager.temporary()
+            target = ast.Name(iter_name, ast.Store())
+            body.append(ast.Assign([self.visit(node.target, fstate)],
+                ast.Call(ast.Name('lenient_unpack_helper', ast.Load()),
+                         [ast.Name('config', ast.Load()),
+                          ast.Name(iter_name, ast.Load()),
+                          self.make_name_tuple(node.target)], [], None, None)))
+        else:
+            target = self.visit(node.target, fstate)
+
+        iter = self.visit(node.iter, fstate)
+        body.extend(self.visit_block(node.body, loop_fstate))
+        self.inject_scope_code(loop_fstate, body)
         return [ast.Assign([ast.Name(did_iterate, ast.Store())],
-                           ast.Name('False', ast.Load())), rv]
+                           ast.Name('False', ast.Load())),
+                ast.For(target, iter, body, [], lineno=node.lineno)]
 
     def visit_Continue(self, node, fstate):
         return [ast.Continue(lineno=node.lineno)]
