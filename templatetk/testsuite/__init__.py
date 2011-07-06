@@ -56,9 +56,8 @@ class TemplateTestCase(unittest.TestCase):
 
 
 def suite():
-    from . import interpreter, bcinterp, astutil
+    from . import interpreter, bcinterp
     suite = unittest.TestSuite()
     suite.addTest(interpreter.suite())
     suite.addTest(bcinterp.suite())
-    suite.addTest(astutil.suite())
     return suite

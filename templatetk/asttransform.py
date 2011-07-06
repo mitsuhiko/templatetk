@@ -22,7 +22,6 @@ from __future__ import with_statement
 
 from . import nodes
 from .nodeutils import NodeVisitor
-from .astutil import fix_missing_locations
 
 
 try:
@@ -50,6 +49,24 @@ _cmpop_to_ast = {
     'in':       ast.In,
     'notin':    ast.NotIn
 }
+
+
+def fix_missing_locations(node):
+    def _fix(node, lineno, col_offset):
+        if 'lineno' in node._attributes:
+            if getattr(node, 'lineno', None) is None:
+                node.lineno = lineno
+            else:
+                lineno = node.lineno
+        if 'col_offset' in node._attributes:
+            if getattr(node, 'col_offset', None) is None:
+                node.col_offset = col_offset
+            else:
+                col_offset = node.col_offset
+        for child in ast.iter_child_nodes(node):
+            _fix(child, lineno, col_offset)
+    _fix(node, 1, 0)
+    return node
 
 
 class IdentManager(object):

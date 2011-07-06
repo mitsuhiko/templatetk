@@ -9,14 +9,19 @@
     :copyright: (c) Copyright 2011 by Armin Ronacher.
     :license: BSD, see LICENSE for more details.
 """
-import sys
 from types import CodeType
-from itertools import islice, izip
+from itertools import izip
 
 from .asttransform import to_ast
-from .astutil import compile_ast
 from .runtime import RuntimeInfo
 from .nodes import Node
+
+
+def compile_ast(ast, filename='<string>'):
+    """Compiles an AST node to bytecode"""
+    if isinstance(filename, unicode):
+        filename = filename.encode('utf-8')
+    return compile(ast, filename, 'exec')
 
 
 def encode_filename(filename):
