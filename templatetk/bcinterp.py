@@ -98,6 +98,13 @@ def lenient_unpack_helper(config, iterable, targets):
     return _unpack_tuple_silent(config, values, targets)
 
 
+def resolve_call_args(*args, **kwargs):
+    """A simple helper function that keeps the compiler code clean.  This
+    is used at runtime as a callback for forwarding calls.
+    """
+    return args, kwargs
+
+
 class RuntimeState(object):
     runtime_info_class = RuntimeInfo
 

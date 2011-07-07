@@ -440,7 +440,7 @@ class Call(Expr):
 
 class Getitem(Expr):
     """Get an attribute or item from an expression and prefer the item."""
-    fields = ('node', 'arg', 'ctx')
+    fields = ('node', 'arg')
 
     def can_assign(self):
         return False
@@ -450,7 +450,7 @@ class Getattr(Expr):
     """Get an attribute or item from an expression that is a ascii-only
     bytestring and prefer the attribute.
     """
-    fields = ('node', 'attr', 'ctx')
+    fields = ('node', 'attr')
 
     def can_assign(self):
         return False

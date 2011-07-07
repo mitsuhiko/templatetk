@@ -113,6 +113,7 @@ class FrameState(object):
         self.requires_lookup = {}
         self.ident_manager = ident_manager
         self.root = root
+        self.buffer = None
 
     def derive(self, scope='soft'):
         return self.__class__(self.config, self, scope, self.ident_manager)
@@ -166,10 +167,12 @@ class ASTTransformer(NodeVisitor):
                     result.extend(rv)
         return result
 
-    def make_call(self, name, method, args, lineno=None):
-        return ast.Call(ast.Attribute(ast.Name(name, ast.Load()),
-                        method, ast.Load()), args, [], None, None,
-                        lineno=lineno)
+    def make_call(self, dotted_name, args, dyn_args=None, lineno=None):
+        parts = dotted_name.split('.')
+        expr = ast.Name(parts.pop(0), ast.Load())
+        for part in parts:
+            expr = ast.Attribute(expr, part, ast.Load())
+        return ast.Call(expr, args, [], dyn_args, None, lineno=lineno)
 
     def make_render_func(self, name, lineno=None):
         body = [ast.Assign([ast.Name('config', ast.Store())],
@@ -226,6 +229,26 @@ class ASTTransformer(NodeVisitor):
         yield ast.ImportFrom(self.bcinterp_module,
                              [ast.alias('*', None)], 0)
 
+    def write_output(self, expr, fstate, lineno=None):
+        expr = self.make_call('config.to_unicode', [expr])
+        if fstate.buffer is None:
+            expr = ast.Yield(expr)
+        else:
+            expr = ast.Call(ast.Attribute(ast.Name(fstate.buffer, ast.Load()),
+                            'append', ast.Load()), [expr], [], None, None)
+        return ast.Expr(expr, lineno=lineno)
+
+    def make_resolve_call(self, node, fstate):
+        args = [self.visit(x, fstate) for x in node.args]
+        kwargs = [self.visit(x, fstate) for x in node.kwargs]
+        dyn_args = dyn_kwargs = None
+        if node.dyn_args is not None:
+            dyn_args = self.visit(node.dyn_args, fstate)
+        if node.dyn_kwargs is not None:
+            dyn_kwargs = self.visit(node.dyn_kwargs, fstate)
+        return ast.Call(ast.Name('resolve_call_args', ast.Load()),
+                        args, kwargs, dyn_args, dyn_kwargs)
+
     def inject_scope_code(self, fstate, body):
         before = []
         for alias, old_name in fstate.required_aliases.iteritems():
@@ -234,7 +257,7 @@ class ASTTransformer(NodeVisitor):
 
         for target, sourcename in fstate.requires_lookup.iteritems():
             before.append(ast.Assign([ast.Name(target, ast.Store())],
-                self.make_call('rtstate', 'lookup_var',
+                self.make_call('rtstate.lookup_var',
                                [ast.Str(sourcename)])))
 
         body[:] = before + body
@@ -251,9 +274,8 @@ class ASTTransformer(NodeVisitor):
         return fix_missing_locations(rv)
 
     def visit_Output(self, node, fstate):
-        return [ast.Expr(ast.Yield(self.make_call('config', 'to_unicode',
-                [self.visit(child, fstate)]), lineno=child.lineno))
-                for child in node.nodes]
+        return [self.write_output(self.visit(child, fstate), fstate,
+                                  lineno=child.lineno) for child in node.nodes]
 
     def visit_For(self, node, fstate):
         loop_fstate = fstate.derive()
@@ -281,7 +303,7 @@ class ASTTransformer(NodeVisitor):
             parent = ast.Name('None', ast.Load())
 
         iter = self.visit(node.iter, fstate)
-        wrapped_iter = self.make_call('config', 'wrap_loop', [iter, parent])
+        wrapped_iter = self.make_call('config.wrap_loop', [iter, parent])
 
         loop_accessor = self.visit(nodes.Name(self.config.forloop_accessor,
                                               'store'), loop_fstate)
@@ -320,6 +342,27 @@ class ASTTransformer(NodeVisitor):
         self.inject_scope_code(scope_fstate, rv)
         return rv
 
+    def visit_FilterBlock(self, node, fstate):
+        filter_fstate = fstate.derive()
+        buffer_name = self.ident_manager.temporary()
+        filter_fstate.buffer = buffer_name
+
+        filter_args = self.make_resolve_call(node, filter_fstate)
+        filter_call = self.make_call('rtstate.info.call_block_filter',
+                                     [ast.Str(node.name),
+                                      ast.Name(buffer_name, ast.Load())],
+                                     filter_args)
+
+        rv = list(self.visit_block(node.body, filter_fstate))
+        rv = [ast.Assign([ast.Name(buffer_name, ast.Store())],
+                          ast.List([], ast.Load()))] + rv + [
+            self.write_output(filter_call, fstate),
+            ast.Assign([ast.Name(buffer_name, ast.Store())],
+                        ast.Name('None', ast.Load()))
+        ]
+        self.inject_scope_code(filter_fstate, rv)
+        return rv
+
     def visit_Name(self, node, fstate):
         name = fstate.lookup_name(node.name, node.ctx)
         ctx = self.make_target_context(node.ctx)
@@ -329,27 +372,21 @@ class ASTTransformer(NodeVisitor):
         target = self.visit(node.target, fstate)
         expr = self.visit(node.node, fstate)
         if fstate.root and isinstance(target, ast.Name):
-            yield ast.Expr(self.make_call('rtstate', 'export_var',
+            yield ast.Expr(self.make_call('rtstate.export_var',
                                           [ast.Str(target.id), expr]))
         yield ast.Assign([target], expr, lineno=node.lineno)
 
     def visit_Getattr(self, node, fstate):
         obj = self.visit(node.node, fstate)
         attr = self.visit(node.attr, fstate)
-        if node.ctx == 'load':
-            return self.make_call('config', 'getattr', [obj, attr],
-                                  lineno=node.lineno)
-        return ast.Attribute(obj, attr, self.make_target_context(node.ctx),
-                             lineno=node.lineno)
+        return self.make_call('config.getattr', [obj, attr],
+                              lineno=node.lineno)
 
     def visit_Getitem(self, node, fstate):
         obj = self.visit(node.node, fstate)
         arg = self.visit(node.arg, fstate)
-        if node.ctx == 'load':
-            return self.make_call('config', 'getitem', [obj, arg],
-                                  lineno=node.lineno)
-        return ast.Subscript(obj, arg, self.make_target_context(node.ctx),
-                             lineno=node.lineno)
+        return self.make_call('config.getitem', [obj, arg],
+                              lineno=node.lineno)
 
     def visit_Call(self, node, fstate):
         obj = self.visit(node.node, fstate)
@@ -368,7 +405,7 @@ class ASTTransformer(NodeVisitor):
         return self.make_const(node.value, fstate)
 
     def visit_TemplateData(self, node, fstate):
-        return self.make_call('config', 'markup_type', [ast.Str(node.data)],
+        return self.make_call('config.markup_type', [ast.Str(node.data)],
                               lineno=node.lineno)
 
     def visit_Tuple(self, node, fstate):
@@ -427,6 +464,10 @@ class ASTTransformer(NodeVisitor):
             ops.append(self.make_cmp_op(op.op))
             comparators.append(self.visit(op.expr, fstate))
         return ast.Compare(left, ops, comparators, lineno=node.lineno)
+
+    def visit_Keyword(self, node, fstate):
+        return ast.keyword(self.visit(node.key, fstate),
+                           self.visit(node.value, fstate), lineno=node.lineno)
 
     def unary(operator):
         def visitor(self, node, fstate):

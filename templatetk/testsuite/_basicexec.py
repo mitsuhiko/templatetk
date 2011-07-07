@@ -168,7 +168,7 @@ class ForLoopTestCase(object):
             n.For(n.Name('item', 'store'), n.Name('iterable', 'load'), [
                 n.Output([n.Name('item', 'load'), n.Const(':'),
                           n.Getattr(n.Name('loop', 'load'),
-                                    n.Const('index0'), 'load'),
+                                    n.Const('index0')),
                           n.Const(';')])
             ], None)
         ])
@@ -282,7 +282,7 @@ class ForLoopTestCase(object):
             n.For(n.Name('item', 'store'), n.Const([1, 2, 3]), [
                 n.Output([n.Name('item', 'load'), n.Const(';')]),
                 n.If(n.Compare(n.Getattr(n.Name('loop', 'load'),
-                                         n.Const('index0'), 'load'),
+                                         n.Const('index0')),
                                [n.Operand('eq', n.Const(1))]), [n.Break()], [])
             ], [])])
 
@@ -291,7 +291,7 @@ class ForLoopTestCase(object):
         template = n.Template([
             n.For(n.Name('item', 'store'), n.Const([1, 2, 3]), [
                 n.If(n.Compare(n.Getattr(n.Name('loop', 'load'),
-                                         n.Const('index0'), 'load'),
+                                         n.Const('index0')),
                                [n.Operand('eq', n.Const(1))]), [n.Continue()], []),
                 n.Output([n.Name('item', 'load'), n.Const(';')])
             ], [])])
@@ -313,7 +313,7 @@ class ForLoopTestCase(object):
 
         self.assert_result_matches(template, dict(), '42;23;42;')
 
-    def visit_ExprStmt(self):
+    def test_exprstmt(self):
         n = nodes
         called = []
 
@@ -390,11 +390,11 @@ class ExpressionTestCase(object):
         test(n.Const(42), 42)
         test(n.Const("test"), "test")
         test(n.Getattr(n.Const('something'),
-                       n.Const('the_attribute'), 'load'),
+                       n.Const('the_attribute')),
              ('something', 'the_attribute', 'attr'),
              config=weird_getattr_config)
         test(n.Getitem(n.Const('something'),
-                       n.Const('the_attribute'), 'load'),
+                       n.Const('the_attribute')),
              ('something', 'the_attribute', 'item'),
              config=weird_getattr_config)
 
@@ -510,11 +510,11 @@ class ExpressionTestCase(object):
         test = self.assert_expression_equals
 
         test(n.Getitem(n.Const('Hello'), n.Slice(n.Const(1), n.Const(None),
-                                                 n.Const(2)), 'load'), 'el')
+                                                 n.Const(2))), 'el')
         test(n.Getitem(n.Const('Hello'), n.Slice(n.Const(None), n.Const(-1),
-                                                 n.Const(1)), 'load'), 'Hell')
+                                                 n.Const(1))), 'Hell')
         test(n.Getitem(n.Const('Hello'), n.Slice(n.Const(None), n.Const(-1),
-                                                 n.Const(None)), 'load'), 'Hell')
+                                                 n.Const(None))), 'Hell')
 
     def test_mark_safe(self):
         n = nodes
@@ -597,7 +597,7 @@ class ImportTestCase(object):
 
         index_template = n.Template([
             n.Import(n.Const('import.html'), n.Name('foo', 'store'), True),
-            n.Output([n.Getattr(n.Name('foo', 'load'), n.Const('bar'), 'load')])
+            n.Output([n.Getattr(n.Name('foo', 'load'), n.Const('bar'))])
         ])
         import_template = n.Template([
             n.Assign(n.Name('bar', 'store'), n.Const(42))
