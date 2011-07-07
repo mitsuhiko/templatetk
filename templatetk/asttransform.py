@@ -69,6 +69,53 @@ def fix_missing_locations(node):
     return node
 
 
+class IdentTracker(NodeVisitor):
+    """A helper class that tracks the usage of identifiers."""
+
+    def __init__(self, frame):
+        NodeVisitor.__init__(self)
+        self.frame = frame
+
+    def visit_Name(self, node):
+        from_outer_scope = False
+        local_id = self.frame.ident_manager.encode(node.name)
+        for idmap in self.frame.ident_manager.iter_identifier_maps(self.frame):
+            if node.name not in idmap:
+                continue
+            from_outer_scope = True
+            local_id = idmap[node.name]
+            if idmap is not self.frame.local_identifiers \
+               and node.ctx != 'load':
+                old = local_id
+                local_id = self.frame.ident_manager.override(node.name)
+                self.frame.required_aliases[local_id] = old
+            break
+
+        if node.ctx != 'load' or not from_outer_scope:
+            self.frame.local_identifiers[node.name] = local_id
+        if node.ctx == 'load' and not from_outer_scope:
+            self.frame.requires_lookup[local_id] = node.name
+
+    def visit_For(self, node):
+        self.visit(node.iter)
+
+    def visit_If(self, node):
+        self.visit(node.test)
+
+    def vist_Block(self):
+        pass
+
+    def visit_FilterBlock(self, node):
+        for arg in node.args:
+            self.visit(arg)
+        for kwarg in node.kwargs:
+            self.visit(kwarg)
+        if node.dyn_args is not None:
+            self.visit(node.dyn_args)
+        if node.dyn_kwargs is not None:
+            self.visit(node.dyn_kwargs)
+
+
 class IdentManager(object):
 
     def __init__(self):
@@ -118,23 +165,28 @@ class FrameState(object):
     def derive(self, scope='soft'):
         return self.__class__(self.config, self, scope, self.ident_manager)
 
+    def analyze_identfiers(self, nodes):
+        tracker = IdentTracker(self)
+        for node in nodes:
+            tracker.visit(node)
+
+    def add_special_identifier(self, name):
+        self.analyze_identfiers([nodes.Name(name, 'store')])
+
     def lookup_name(self, name, ctx):
         assert ctx in _context_target_map, 'unknown context'
         for idmap in self.ident_manager.iter_identifier_maps(self):
-            if name in idmap:
-                local_identifier = idmap[name]
-                if idmap is not self.local_identifiers and ctx != 'load':
-                    old = local_identifier
-                    self.local_identifiers[name] = local_identifier = \
-                        self.ident_manager.override(name)
-                    self.required_aliases[local_identifier] = old
-                return local_identifier
+            if name not in idmap:
+                continue
+            if ctx != 'load' and idmap is not self.local_identifiers:
+                raise AssertionError('tried to store to an identifier '
+                                     'that does not have an alias in the '
+                                     'identifier map.  Did you forget to '
+                                     'analyze_identfiers()?')
+            return idmap[name]
 
-        local_identifier = self.ident_manager.encode(name)
-        self.local_identifiers[name] = local_identifier
-        if ctx == 'load':
-            self.requires_lookup[local_identifier] = name
-        return local_identifier
+        raise AssertionError('identifier %r not found.  Did you forget to '
+                             'analyze_identfiers()?' % name)
 
 
 def to_ast(node):
@@ -153,14 +205,20 @@ class ASTTransformer(NodeVisitor):
         self.ident_manager = IdentManager()
 
     def transform(self, node):
+        assert isinstance(node, nodes.Template), 'can only transform ' \
+            'templates, got %r' % node.__class__.__name__
         return self.visit(node, None)
+
+    def visit(self, node, state):
+        rv = NodeVisitor.visit(self, node, state)
+        assert rv is not None, 'visitor for %r failed' % node
+        return rv
 
     def visit_block(self, nodes, state):
         result = []
         if nodes:
             for node in nodes:
                 rv = self.visit(node, state)
-                assert rv is not None, 'visitor for %r failed' % node
                 if isinstance(rv, ast.AST):
                     result.append(rv)
                 else:
@@ -214,18 +272,20 @@ class ASTTransformer(NodeVisitor):
         elif isinstance(val, basestring):
             return ast.Str(val)
         elif isinstance(val, tuple):
-            return ast.Tuple([self.make_const(x, fstate) for x in val])
+            return ast.Tuple([self.make_const(x, fstate) for x in val],
+                             ast.Load())
         elif isinstance(val, list):
             return ast.List([self.make_const(x, fstate) for x in val],
                             ast.Load())
         elif isinstance(val, dict):
-            return ast.Dict(self.make_const(val.keys(), fstate),
-                            self.make_const(val.values(), fstate))
+            return ast.Dict([self.make_const(k, fstate) for k in val.keys()],
+                            [self.make_const(v, fstate) for v in val.values()])
         elif val in (None, True, False):
             return ast.Name(str(val), ast.Load())
         assert 0, 'Unsupported constant value for compiler'
 
     def make_runtime_imports(self):
+        yield ast.ImportFrom('__future__', [ast.alias('division', None)], 0)
         yield ast.ImportFrom(self.bcinterp_module,
                              [ast.alias('*', None)], 0)
 
@@ -260,12 +320,14 @@ class ASTTransformer(NodeVisitor):
                 self.make_call('rtstate.lookup_var',
                                [ast.Str(sourcename)])))
 
-        body[:] = before + body
+        body[:] = before + body + [
+            ast.If(ast.Num(0), [ast.Expr(ast.Yield(ast.Num(0)))], [])]
 
     def visit_Template(self, node, fstate):
         assert fstate is None, 'framestate passed to template visitor'
         fstate = FrameState(self.config, ident_manager=self.ident_manager,
                             root=True)
+        fstate.analyze_identfiers(node.body)
         rv = ast.Module(lineno=1)
         root = self.make_render_func('root')
         root.body.extend(self.visit_block(node.body, fstate))
@@ -279,6 +341,11 @@ class ASTTransformer(NodeVisitor):
 
     def visit_For(self, node, fstate):
         loop_fstate = fstate.derive()
+        loop_fstate.analyze_identfiers([node.target])
+        loop_fstate.add_special_identifier(self.config.forloop_accessor)
+        loop_fstate.analyze_identfiers(node.body)
+        # XXX: else_ in a separate fstate
+
         did_iterate = self.ident_manager.temporary()
         body = [ast.Assign([ast.Name(did_iterate, ast.Store())],
                            ast.Name('True', ast.Load()))]
@@ -324,26 +391,35 @@ class ASTTransformer(NodeVisitor):
 
     def visit_If(self, node, fstate):
         test = self.visit(node.test, fstate)
+
         condition_fstate = fstate.derive()
+        condition_fstate.analyze_identfiers(node.body)
         body = self.visit_block(node.body, condition_fstate)
-        else_ = []
+        self.inject_scope_code(condition_fstate, body)
+
         if node.else_:
-            else_ = self.visit_block(node.else_, condition_fstate)
-        rv = [ast.If(test, body, else_)]
-        self.inject_scope_code(condition_fstate, rv)
-        return rv
+            condition_fstate_else = fstate.derive()
+            condition_fstate_else.analyze_identfiers(node.else_)
+            else_ = self.visit_block(node.else_, condition_fstate_else)
+            self.inject_scope_code(condition_fstate, else_)
+        else:
+            else_ = []
+
+        return [ast.If(test, body, else_)]
 
     def visit_ExprStmt(self, node, fstate):
         return ast.Expr(self.visit(node.node, fstate), lineno=node.lineno)
 
     def visit_Scope(self, node, fstate):
         scope_fstate = fstate.derive()
+        scope_fstate.analyze_identfiers(node.body)
         rv = list(self.visit_block(node.body, scope_fstate))
         self.inject_scope_code(scope_fstate, rv)
         return rv
 
     def visit_FilterBlock(self, node, fstate):
         filter_fstate = fstate.derive()
+        filter_fstate.analyze_identfiers(node.body)
         buffer_name = self.ident_manager.temporary()
         filter_fstate.buffer = buffer_name
 
@@ -363,18 +439,33 @@ class ASTTransformer(NodeVisitor):
         self.inject_scope_code(filter_fstate, rv)
         return rv
 
+    def visit_Assign(self, node, fstate):
+        # TODO: also allow assignments to tuples
+        assert isinstance(node.target, nodes.Name), 'can only assign to names'
+        target = self.visit(node.target, fstate)
+        expr = self.visit(node.node, fstate)
+        yield ast.Assign([target], expr, lineno=node.lineno)
+        if fstate.root and isinstance(target, ast.Name):
+            yield ast.Expr(self.make_call('rtstate.export_var',
+                                          [ast.Str(node.target.name),
+                                           ast.Name(target.id, ast.Load())]))
+
+    def visit_Import(self, node, fstate):
+        raise NotImplementedError()
+
+    def visit_FromImport(self, node, fstate):
+        raise NotImplementedError()
+
+    def visit_Include(self, node, fstate):
+        raise NotImplementedError()
+
+    def visit_Extends(self, node, fstate):
+        raise NotImplementedError()
+
     def visit_Name(self, node, fstate):
         name = fstate.lookup_name(node.name, node.ctx)
         ctx = self.make_target_context(node.ctx)
         return ast.Name(name, ctx)
-
-    def visit_Assign(self, node, fstate):
-        target = self.visit(node.target, fstate)
-        expr = self.visit(node.node, fstate)
-        if fstate.root and isinstance(target, ast.Name):
-            yield ast.Expr(self.make_call('rtstate.export_var',
-                                          [ast.Str(target.id), expr]))
-        yield ast.Assign([target], expr, lineno=node.lineno)
 
     def visit_Getattr(self, node, fstate):
         obj = self.visit(node.node, fstate)
@@ -391,13 +482,12 @@ class ASTTransformer(NodeVisitor):
     def visit_Call(self, node, fstate):
         obj = self.visit(node.node, fstate)
         args = [self.visit(x, fstate) for x in node.args]
-        kwargs = [(self.visit(k, fstate), self.visit(v, fstate))
-                  for k, v in node.kwargs]
+        kwargs = [self.visit(kw, fstate) for kw in node.kwargs]
         dyn_args = dyn_kwargs = None
         if node.dyn_args is not None:
-            dyn_args = self.visit(dyn_args, fstate)
+            dyn_args = self.visit(node.dyn_args, fstate)
         if node.dyn_kwargs is not None:
-            dyn_kwargs = self.visit(dyn_kwargs, fstate)
+            dyn_kwargs = self.visit(node.dyn_kwargs, fstate)
         return ast.Call(obj, args, kwargs, dyn_args, dyn_kwargs,
                         lineno=node.lineno)
 
@@ -413,8 +503,8 @@ class ASTTransformer(NodeVisitor):
                          self.make_target_context(node.ctx))
 
     def visit_List(self, node, fstate):
-        return ast.List([self.visit(x, fstate) for x in node.args],
-                        self.make_target_context(node.ctx))
+        return ast.List([self.visit(x, fstate) for x in node.items],
+                        ast.Load())
 
     def visit_Dict(self, node, fstate):
         keys = []
@@ -423,6 +513,9 @@ class ASTTransformer(NodeVisitor):
             keys.append(self.visit(pair.key, fstate))
             values.append(self.visit(pair.value, fstate))
         return ast.Dict(keys, values, lineno=node.lineno)
+
+    def visit_Filter(self, node, fstate):
+        raise NotImplementedError()
 
     def visit_CondExpr(self, node, fstate):
         test = self.visit(node.test, fstate)
@@ -466,8 +559,8 @@ class ASTTransformer(NodeVisitor):
         return ast.Compare(left, ops, comparators, lineno=node.lineno)
 
     def visit_Keyword(self, node, fstate):
-        return ast.keyword(self.visit(node.key, fstate),
-                           self.visit(node.value, fstate), lineno=node.lineno)
+        return ast.keyword(node.key, self.visit(node.value, fstate),
+                           lineno=node.lineno)
 
     def unary(operator):
         def visitor(self, node, fstate):

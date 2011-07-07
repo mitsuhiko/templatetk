@@ -29,12 +29,12 @@ class BCInterpTestCase(_basicexec.BasicExecTestCase):
     def _evaluate(self, node, ctx, config, info):
         n = nodes
         node = n.Template(
-            n.Assign(n.Name('__result__', 'store'), node), lineno=1
+            [n.Assign(n.Name('__result__', 'store'), node)], lineno=1
         ).set_config(config)
         ns, rtstate = self.get_exec_namespace(node, ctx, config)
         for event in ns['root'](rtstate):
             pass
-        return rtstate.exported['__result__']
+        return rtstate.info.exports['__result__']
 
 
 def suite():

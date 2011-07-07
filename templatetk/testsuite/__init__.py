@@ -26,8 +26,7 @@ class _ExceptionCatcher(object):
             self.test_case.fail('Expected exception of type %r' %
                                 exception_name)
         elif exc_type is not self.exception_class:
-            self.test_case.fail('Expected exception of type %r, got %r' %
-                                (exception_name, exc_type.__name__))
+            raise
         return True
 
 

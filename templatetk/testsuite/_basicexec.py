@@ -356,7 +356,7 @@ class ExpressionTestCase(object):
         not_called_buffer = []
 
         def simplecall(func):
-            return n.Call(n.Name(func, 'load'), [], [], None, None)
+            return n.Call(n.Name(func.__name__, 'load'), [], [], None, None)
 
         def not_called():
             not_called_buffer.append(42)
@@ -365,8 +365,10 @@ class ExpressionTestCase(object):
         test(n.And(n.Const(0), n.Const(23)), False)
         test(n.Or(n.Const(42), n.Const(23)), 42)
         test(n.Or(n.Const(0), n.Const(23)), 23)
-        test(n.And(n.Const(0), simplecall(not_called)), False)
-        test(n.Or(n.Const(42), simplecall(not_called)), 42)
+        test(n.And(n.Const(0), simplecall(not_called)), False,
+             ctx=dict(not_called=not_called))
+        test(n.Or(n.Const(42), simplecall(not_called)), 42,
+             ctx=dict(not_called=not_called))
         self.assert_equal(not_called_buffer, [])
 
     def test_unary(self):
@@ -451,13 +453,15 @@ class ExpressionTestCase(object):
         not_called_buffer = []
 
         def simplecall(func):
-            return n.Call(n.Name(func, 'load'), [], [], None, None)
+            return n.Call(n.Name(func.__name__, 'load'), [], [], None, None)
 
         def not_called():
             not_called_buffer.append(42)
 
-        test(n.CondExpr(n.Const(1), n.Const(42), simplecall(not_called)), 42)
-        test(n.CondExpr(n.Const(0), simplecall(not_called), n.Const(23)), 23)
+        test(n.CondExpr(n.Const(1), n.Const(42), simplecall(not_called)), 42,
+             ctx=dict(not_called=not_called))
+        test(n.CondExpr(n.Const(0), simplecall(not_called), n.Const(23)), 23,
+             ctx=dict(not_called=not_called))
 
         self.assert_equal(not_called_buffer, [])
 
@@ -480,10 +484,11 @@ class ExpressionTestCase(object):
              [n.Keyword('c', n.Const(3))], None,
              n.Const({'b': 2, 'd': 4})), (1, 2, 3, 4), ctx=dict(foo=foo))
 
-        self.assert_template_fails(n.Call(n.Name('foo', 'load'), [n.Const(1)],
-             [n.Keyword('c', n.Const(3))], None,
-             n.Const({'c': 2, 'b': 23, 'd': 4})), ctx=dict(foo=foo),
-             exception=TypeError)
+        self.assert_template_fails(n.Template(
+            n.Output([n.Call(n.Name('foo', 'load'), [n.Const(1)],
+            [n.Keyword('c', n.Const(3))], None,
+            n.Const({'c': 2, 'b': 23, 'd': 4}))])), ctx=dict(foo=foo),
+            exception=TypeError)
 
     def test_filters(self):
         n = nodes
