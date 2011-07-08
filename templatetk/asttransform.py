@@ -225,12 +225,16 @@ class ASTTransformer(NodeVisitor):
                     result.extend(rv)
         return result
 
-    def make_call(self, dotted_name, args, dyn_args=None, lineno=None):
+    def make_getattr(self, dotted_name, lineno=None):
         parts = dotted_name.split('.')
-        expr = ast.Name(parts.pop(0), ast.Load())
+        expr = ast.Name(parts.pop(0), ast.Load(), lineno=lineno)
         for part in parts:
             expr = ast.Attribute(expr, part, ast.Load())
-        return ast.Call(expr, args, [], dyn_args, None, lineno=lineno)
+        return expr
+
+    def make_call(self, dotted_name, args, dyn_args=None, lineno=None):
+        return ast.Call(self.make_getattr(dotted_name), args, [],
+                        dyn_args, None, lineno=lineno)
 
     def make_render_func(self, name, lineno=None):
         body = [ast.Assign([ast.Name('config', ast.Store())],
@@ -515,13 +519,45 @@ class ASTTransformer(NodeVisitor):
         return ast.Dict(keys, values, lineno=node.lineno)
 
     def visit_Filter(self, node, fstate):
-        raise NotImplementedError()
+        value = self.visit(node.node, fstate)
+        filter_args = self.make_resolve_call(node, fstate)
+        return self.make_call('rtstate.info.call_filter',
+            [ast.Str(node.name), value], filter_args, lineno=node.lineno)
+
+    def visit_Test(self, node, fstate):
+        value = self.visit(node.node, fstate)
+        filter_args = self.make_resolve_call(node, fstate)
+        return self.make_call('rtstate.info.call_test',
+            [ast.Str(node.name), value], filter_args, lineno=node.lineno)
 
     def visit_CondExpr(self, node, fstate):
         test = self.visit(node.test, fstate)
         true = self.visit(node.true, fstate)
         false = self.visit(node.false, fstate)
         return ast.IfExp(test, true, false, lineno=node.lineno)
+
+    def visit_MarkSafe(self, node, fstate):
+        return self.make_call('config.markup_type',
+            [self.visit(node.expr, fstate)], lineno=node.lineno)
+
+    def visit_MarkSafeIfAutoescape(self, node, fstate):
+        value = self.visit(node.expr, fstate)
+        return ast.IfExp(self.make_getattr('rtstate.info.autoescape'),
+                         self.make_call('config.markup_type', [value]),
+                         value)
+
+    def visit_Slice(self, node, fstate):
+        start = self.visit(node.start, fstate)
+        if node.stop is not None:
+            stop = self.visit(node.stop, fstate)
+        else:
+            stop = self.Name('None', ast.Load())
+        if node.step is not None:
+            step = self.visit(node.step, fstate)
+        else:
+            stop = self.Name('None', ast.Load())
+        return self.make_call('slice', [start, stop, step],
+                              lineno=node.lineno)
 
     def binexpr(operator):
         def visitor(self, node, fstate):
