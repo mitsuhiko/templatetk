@@ -173,6 +173,15 @@ class FrameState(object):
     def add_special_identifier(self, name):
         self.analyze_identfiers([nodes.Name(name, 'store')])
 
+    def iter_vars(self):
+        found = set()
+        for idmap in self.ident_manager.iter_identifier_maps(self):
+            for name, local_id in idmap.iteritems():
+                if name in found:
+                    continue
+                found.add(name)
+                yield name, local_id
+
     def lookup_name(self, name, ctx):
         assert ctx in _context_target_map, 'unknown context'
         for idmap in self.ident_manager.iter_identifier_maps(self):
@@ -327,6 +336,14 @@ class ASTTransformer(NodeVisitor):
         body[:] = before + body + [
             ast.If(ast.Num(0), [ast.Expr(ast.Yield(ast.Num(0)))], [])]
 
+    def locals_to_dict(self, fstate, lineno=None):
+        keys = []
+        values = []
+        for name, local_id in fstate.iter_vars():
+            keys.append(ast.Str(name))
+            values.append(ast.Name(local_id, ast.Load()))
+        return ast.Dict(keys, values, lineno=lineno)
+
     def visit_Template(self, node, fstate):
         assert fstate is None, 'framestate passed to template visitor'
         fstate = FrameState(self.config, ident_manager=self.ident_manager,
@@ -465,6 +482,15 @@ class ASTTransformer(NodeVisitor):
 
     def visit_Extends(self, node, fstate):
         raise NotImplementedError()
+
+    def visit_Block(self, node, fstate):
+        block_name = ast.Str(node.name)
+        vars = self.locals_to_dict(fstate)
+        return ast.For(ast.Name('event', ast.Store()),
+                       self.make_call('rtstate.evaluate_block',
+                                      [block_name, vars]),
+                       [ast.Expr(ast.Yield(ast.Name('event', ast.Load())))],
+                       [], lineno=node.lineno)
 
     def visit_Name(self, node, fstate):
         name = fstate.lookup_name(node.name, node.ctx)

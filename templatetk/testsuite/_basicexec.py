@@ -548,6 +548,19 @@ class ExpressionTestCase(object):
 
 class InheritanceTestCase(object):
 
+    def test_blocks(self):
+        n = nodes
+
+        index_template = n.Template([
+            n.Assign(n.Name('foo', 'store'), n.Const(42)),
+            n.Assign(n.Name('bar', 'store'), n.Const(23)),
+            n.Block('the_block', [
+                n.Output([n.Const('block contents')])
+            ])
+        ])
+
+        self.assert_result_matches(index_template, dict(), 'block contents')
+
     def test_basic_inheritance(self):
         n = nodes
 

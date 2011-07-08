@@ -113,6 +113,10 @@ class RuntimeState(object):
         self.config = config
         self.info = self.runtime_info_class(self.config, template_name)
 
+    def evaluate_block(self, name, vars=None, level=1):
+        """Evaluates a single block."""
+        return self.info.evaluate_block(name, level, vars)
+
     def export_var(self, name, value):
         """Called by the runtime for toplevel assignments."""
         self.info.exports[name] = value
