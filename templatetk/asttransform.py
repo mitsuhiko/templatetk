@@ -355,6 +355,31 @@ class ASTTransformer(NodeVisitor):
                         self.make_getattr('rtstate.context')], ast.Load())],
             lineno=lineno)
 
+    def make_template_lookup(self, template_expression, fstate):
+        return [
+            ast.Assign([ast.Name('template_name', ast.Store())],
+                       self.visit(template_expression, fstate)),
+            ast.Assign([ast.Name('template', ast.Store())],
+                       self.make_call('rtstate.get_template',
+                                      [ast.Name('template_name',
+                                                ast.Load())]))
+        ]
+
+    def make_template_render_call(self, vars, behavior):
+        return [
+            ast.Assign([ast.Name('info', ast.Store())],
+                       self.make_call('rtstate.info.make_info',
+                                      [ast.Name('template', ast.Load()),
+                                       ast.Name('template_name', ast.Load()),
+                                       ast.Str(behavior)])),
+            ast.For(ast.Name('event', ast.Store()),
+                    self.make_call('config.yield_from_template',
+                                   [ast.Name('template', ast.Load()),
+                                    ast.Name('info', ast.Load()),
+                                    vars]),
+                    [ast.Expr(ast.Yield(ast.Name('event', ast.Load())))], [])
+        ]
+
     def visit_Template(self, node, fstate):
         assert fstate is None, 'framestate passed to template visitor'
         fstate = FrameState(self.config, ident_manager=self.ident_manager,
@@ -512,28 +537,8 @@ class ASTTransformer(NodeVisitor):
 
     def visit_Include(self, node, fstate):
         vars = self.context_to_lookup(fstate)
-        lookup = [
-            ast.Assign([ast.Name('template_name', ast.Store())],
-                       self.visit(node.template, fstate)),
-            ast.Assign([ast.Name('template', ast.Store())],
-                       self.make_call('rtstate.get_template',
-                                      [ast.Name('template_name',
-                                                ast.Load())]))
-        ]
-        render = [
-            ast.Assign([ast.Name('info', ast.Store())],
-                       self.make_call('rtstate.info.make_info',
-                                      [ast.Name('template', ast.Load()),
-                                       ast.Name('template_name', ast.Load()),
-                                       ast.Str('include')])),
-            ast.For(ast.Name('event', ast.Store()),
-                    self.make_call('config.yield_from_template',
-                                   [ast.Name('template', ast.Load()),
-                                    ast.Name('info', ast.Load()),
-                                    vars]),
-                    [ast.Expr(ast.Yield(ast.Name('event', ast.Load())))], [])
-        ]
-
+        lookup = self.make_template_lookup(node.template, fstate)
+        render = self.make_template_render_call(vars, 'include')
         if node.ignore_missing:
             return ast.TryExcept(lookup, [ast.ExceptHandler(
                 ast.Name('TemplateNotFound', ast.Load()), None, [])], render)
@@ -541,26 +546,9 @@ class ASTTransformer(NodeVisitor):
 
     def visit_Extends(self, node, fstate):
         vars = self.context_to_lookup(fstate)
-        return [
-            ast.Assign([ast.Name('template_name', ast.Store())],
-                       self.visit(node.template, fstate)),
-            ast.Assign([ast.Name('template', ast.Store())],
-                       self.make_call('rtstate.get_template',
-                                      [ast.Name('template_name',
-                                                ast.Load())])),
-            ast.Assign([ast.Name('info', ast.Store())],
-                       self.make_call('rtstate.info.make_info',
-                                      [ast.Name('template', ast.Load()),
-                                       ast.Name('template_name', ast.Load()),
-                                       ast.Str('extends')])),
-            ast.For(ast.Name('event', ast.Store()),
-                    self.make_call('config.yield_from_template',
-                                   [ast.Name('template', ast.Load()),
-                                    ast.Name('info', ast.Load()),
-                                    vars]),
-                    [ast.Expr(ast.Yield(ast.Name('event', ast.Load())))], []),
-            ast.Return(None)
-        ]
+        lookup = self.make_template_lookup(node.template, fstate)
+        render = self.make_template_render_call(vars, 'extends')
+        return lookup + render + [ast.Return(None)]
 
     def visit_Block(self, node, fstate):
         block_name = ast.Str(node.name)
