@@ -355,6 +355,17 @@ class ASTTransformer(NodeVisitor):
                         self.make_getattr('rtstate.context')], ast.Load())],
             lineno=lineno)
 
+    def make_assign(self, target, expr, fstate, lineno=None):
+        assert isinstance(target, nodes.Name), 'can only assign to names'
+        target_node = self.visit(target, fstate)
+        rv = [ast.Assign([target_node], expr, lineno=lineno)]
+        if fstate.root and isinstance(target_node, ast.Name):
+            rv.append(ast.Expr(self.make_call('rtstate.export_var',
+                                              [ast.Str(target.name),
+                                               ast.Name(target_node.id,
+                                                        ast.Load())])))
+        return rv
+
     def make_template_lookup(self, template_expression, fstate):
         return [
             ast.Assign([ast.Name('template_name', ast.Store())],
@@ -365,18 +376,24 @@ class ASTTransformer(NodeVisitor):
                                                 ast.Load())]))
         ]
 
+    def make_template_info(self, behavior):
+        return ast.Assign([ast.Name('info', ast.Store())],
+                           self.make_call('rtstate.info.make_info',
+                                          [ast.Name('template', ast.Load()),
+                                           ast.Name('template_name', ast.Load()),
+                                           ast.Str(behavior)]))
+
+    def make_template_generator(self, vars):
+        return self.make_call('config.yield_from_template',
+                              [ast.Name('template', ast.Load()),
+                               ast.Name('info', ast.Load()),
+                               vars])
+
     def make_template_render_call(self, vars, behavior):
         return [
-            ast.Assign([ast.Name('info', ast.Store())],
-                       self.make_call('rtstate.info.make_info',
-                                      [ast.Name('template', ast.Load()),
-                                       ast.Name('template_name', ast.Load()),
-                                       ast.Str(behavior)])),
+            self.make_template_info(behavior),
             ast.For(ast.Name('event', ast.Store()),
-                    self.make_call('config.yield_from_template',
-                                   [ast.Name('template', ast.Load()),
-                                    ast.Name('info', ast.Load()),
-                                    vars]),
+                    self.make_template_generator(vars),
                     [ast.Expr(ast.Yield(ast.Name('event', ast.Load())))], [])
         ]
 
@@ -520,17 +537,19 @@ class ASTTransformer(NodeVisitor):
 
     def visit_Assign(self, node, fstate):
         # TODO: also allow assignments to tuples
-        assert isinstance(node.target, nodes.Name), 'can only assign to names'
-        target = self.visit(node.target, fstate)
-        expr = self.visit(node.node, fstate)
-        yield ast.Assign([target], expr, lineno=node.lineno)
-        if fstate.root and isinstance(target, ast.Name):
-            yield ast.Expr(self.make_call('rtstate.export_var',
-                                          [ast.Str(node.target.name),
-                                           ast.Name(target.id, ast.Load())]))
+        return self.make_assign(node.target, self.visit(node.node, fstate),
+                                fstate, lineno=node.lineno)
 
     def visit_Import(self, node, fstate):
-        raise NotImplementedError()
+        vars = self.context_to_lookup(fstate)
+        lookup = self.make_template_lookup(node.template, fstate)
+        info = self.make_template_info('import')
+        gen = self.make_template_generator(vars)
+        module = self.make_call('info.make_module', [gen])
+        rv = lookup + [info]
+        rv.extend(self.make_assign(node.target, module, fstate,
+                                   lineno=node.lineno))
+        return rv
 
     def visit_FromImport(self, node, fstate):
         raise NotImplementedError()
