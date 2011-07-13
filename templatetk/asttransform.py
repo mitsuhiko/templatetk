@@ -207,6 +207,7 @@ def to_ast(node):
 
 class ASTTransformer(NodeVisitor):
     bcinterp_module = __name__.split('.')[0] + '.bcinterp'
+    exception_module = __name__.split('.')[0] + '.exceptions'
 
     def __init__(self, config):
         NodeVisitor.__init__(self)
@@ -302,6 +303,8 @@ class ASTTransformer(NodeVisitor):
     def make_runtime_imports(self):
         yield ast.ImportFrom('__future__', [ast.alias('division', None)], 0)
         yield ast.ImportFrom(self.bcinterp_module,
+                             [ast.alias('*', None)], 0)
+        yield ast.ImportFrom(self.exception_module,
                              [ast.alias('*', None)], 0)
 
     def write_output(self, expr, fstate, lineno=None):
@@ -508,7 +511,33 @@ class ASTTransformer(NodeVisitor):
         raise NotImplementedError()
 
     def visit_Include(self, node, fstate):
-        raise NotImplementedError()
+        vars = self.context_to_lookup(fstate)
+        lookup = [
+            ast.Assign([ast.Name('template_name', ast.Store())],
+                       self.visit(node.template, fstate)),
+            ast.Assign([ast.Name('template', ast.Store())],
+                       self.make_call('rtstate.get_template',
+                                      [ast.Name('template_name',
+                                                ast.Load())]))
+        ]
+        render = [
+            ast.Assign([ast.Name('info', ast.Store())],
+                       self.make_call('rtstate.info.make_info',
+                                      [ast.Name('template', ast.Load()),
+                                       ast.Name('template_name', ast.Load()),
+                                       ast.Str('include')])),
+            ast.For(ast.Name('event', ast.Store()),
+                    self.make_call('config.yield_from_template',
+                                   [ast.Name('template', ast.Load()),
+                                    ast.Name('info', ast.Load()),
+                                    vars]),
+                    [ast.Expr(ast.Yield(ast.Name('event', ast.Load())))], [])
+        ]
+
+        if node.ignore_missing:
+            return ast.TryExcept(lookup, [ast.ExceptHandler(
+                ast.Name('TemplateNotFound', ast.Load()), None, [])], render)
+        return lookup + render
 
     def visit_Extends(self, node, fstate):
         vars = self.context_to_lookup(fstate)

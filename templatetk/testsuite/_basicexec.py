@@ -12,6 +12,7 @@
 from . import TemplateTestCase
 from .. import nodes
 from ..config import Config
+from ..exceptions import TemplateNotFound
 
 
 class _SimpleTemplate(object):
@@ -51,7 +52,10 @@ class BasicExecTestCase(TemplateTestCase):
 
         class CustomConfig(Config):
             def get_template(self, name):
-                return _SimpleTemplate(name, templates[name], test_case)
+                try:
+                    return _SimpleTemplate(name, templates[name], test_case)
+                except KeyError:
+                    raise TemplateNotFound(name)
             def yield_from_template(self, template, info, vars=None):
                 return template.test_case.execute(template.node, ctx=vars,
                                                   config=self, info=info)
@@ -606,6 +610,25 @@ class IncludeTestCase(object):
 
         self.assert_result_matches(index_template, dict(),
             '1\nA\n2', config=config)
+
+    def test_basic_include_ignore_missing(self):
+        n = nodes
+
+        index_template = n.Template([
+            n.Output([n.Const('1\n')]),
+            n.Include(n.Const('includemissing.html'), True, True),
+            n.Output([n.Const('\n2')])
+        ])
+        include_template = n.Template([
+            n.Output([n.Const('A')]),
+        ])
+
+        config = self.make_inheritance_config({
+            'index.html':       index_template
+        })
+
+        self.assert_result_matches(index_template, dict(),
+            '1\n\n2', config=config)
 
 
 class ImportTestCase(object):

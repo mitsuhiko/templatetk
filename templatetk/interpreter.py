@@ -444,25 +444,17 @@ class Interpreter(NodeVisitor):
             if not node.ignore_missing:
                 raise
             return
-        if node.with_context:
-            vars = self
-        else:
-            vars = None
         info = state.info.make_info(template, template_name, 'include')
         for event in state.config.yield_from_template(template, info,
-                                                      vars):
+                                                      state):
             yield event
 
     def resolve_import(self, node, state):
         template_name = self.visit(node.template, state)
         template = state.get_template(template_name)
-        if node.with_context:
-            vars = self
-        else:
-            vars = None
         info = state.info.make_info(template, template_name, 'import')
         gen = state.config.yield_from_template(template, info,
-                                               vars)
+                                               state)
         return info.make_module(gen)
 
     def visit_Import(self, node, state):
