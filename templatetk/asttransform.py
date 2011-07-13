@@ -560,7 +560,8 @@ class ASTTransformer(NodeVisitor):
         render = self.make_template_render_call(vars, 'include')
         if node.ignore_missing:
             return ast.TryExcept(lookup, [ast.ExceptHandler(
-                ast.Name('TemplateNotFound', ast.Load()), None, [])], render)
+                ast.Name('TemplateNotFound', ast.Load()), None,
+                [ast.Pass()])], render)
         return lookup + render
 
     def visit_Extends(self, node, fstate):
