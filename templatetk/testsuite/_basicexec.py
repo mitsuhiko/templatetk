@@ -53,8 +53,8 @@ class BasicExecTestCase(TemplateTestCase):
             def get_template(self, name):
                 return _SimpleTemplate(name, templates[name], test_case)
             def yield_from_template(self, template, info, vars=None):
-                return template.test_case.evaluate(template.node, ctx=vars,
-                                                   config=self, info=info)
+                return template.test_case.execute(template.node, ctx=vars,
+                                                  config=self, info=info)
             def iter_template_blocks(self, template):
                 return test_case.iter_template_blocks(template, self)
             def make_module(self, template_name, exports, body):

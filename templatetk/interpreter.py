@@ -426,7 +426,7 @@ class Interpreter(NodeVisitor):
         template = state.get_template(template_name)
         info = state.info.make_info(template, template_name, 'extends')
         for event in state.config.yield_from_template(template, info,
-                                                      self):
+                                                      state):
             yield event
         raise StopExecutionException()
 

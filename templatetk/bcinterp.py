@@ -105,13 +105,29 @@ def resolve_call_args(*args, **kwargs):
     return args, kwargs
 
 
+def register_block_mapping(info, mapping):
+    def _make_executor(render_func):
+        def executor(info, vars):
+            rtstate = RuntimeState(vars, info.config, info.template_name)
+            return render_func(rtstate)
+        return executor
+    for name, render_func in mapping.iteritems():
+        info.register_block(name, _make_executor(render_func))
+
+
 class RuntimeState(object):
     runtime_info_class = RuntimeInfo
 
-    def __init__(self, context, config, template_name):
+    def __init__(self, context, config, template_name, info=None):
         self.context = context
         self.config = config
-        self.info = self.runtime_info_class(self.config, template_name)
+        if info is None:
+            info = self.runtime_info_class(self.config, template_name)
+        self.info = info
+
+    def get_template(self, template_name):
+        """Looks up a template."""
+        return self.info.get_template(template_name)
 
     def evaluate_block(self, name, vars=None, level=1):
         """Evaluates a single block."""
@@ -131,3 +147,31 @@ class RuntimeState(object):
             return self.context[name]
         except KeyError:
             return self.config.undefined_variable(name)
+
+
+class MultiMappingLookup(object):
+
+    def __init__(self, mappings):
+        self.mappings = mappings
+
+    def __contains__(self, key):
+        for d in self.mappings:
+            if key in d:
+                return True
+        return False
+
+    def __getitem__(self, key):
+        for d in self.mappings:
+            try:
+                return d[key]
+            except KeyError:
+                continue
+        raise KeyError(key)
+
+    def __iter__(self):
+        found = set()
+        for d in self.mappings:
+            for key in d:
+                if key not in found:
+                    found.add(key)
+                    yield key

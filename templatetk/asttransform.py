@@ -137,9 +137,11 @@ class IdentManager(object):
             return False
         return name[2:].rsplit('_', 1)[0]
 
-    def iter_identifier_maps(self, start):
+    def iter_identifier_maps(self, start, stop_at_hard=True):
         ptr = start
         while ptr is not None:
+            if stop_at_hard and ptr.scope == 'hard':
+                break
             yield ptr.local_identifiers
             ptr = ptr.parent
 
@@ -245,7 +247,7 @@ class ASTTransformer(NodeVisitor):
         return ast.Call(self.make_getattr(dotted_name), args, [],
                         dyn_args, None, lineno=lineno)
 
-    def make_render_func(self, name, lineno=None):
+    def make_rtstate_func(self, name, lineno=None):
         body = [ast.Assign([ast.Name('config', ast.Store())],
                            ast.Attribute(ast.Name('rtstate', ast.Load()),
                                          'config', ast.Load()))]
@@ -344,16 +346,44 @@ class ASTTransformer(NodeVisitor):
             values.append(ast.Name(local_id, ast.Load()))
         return ast.Dict(keys, values, lineno=lineno)
 
+    def context_to_lookup(self, fstate, lineno=None):
+        return self.make_call('MultiMappingLookup',
+            [ast.Tuple([self.locals_to_dict(fstate),
+                        self.make_getattr('rtstate.context')], ast.Load())],
+            lineno=lineno)
+
     def visit_Template(self, node, fstate):
         assert fstate is None, 'framestate passed to template visitor'
         fstate = FrameState(self.config, ident_manager=self.ident_manager,
                             root=True)
         fstate.analyze_identfiers(node.body)
         rv = ast.Module(lineno=1)
-        root = self.make_render_func('root')
+        root = self.make_rtstate_func('root')
         root.body.extend(self.visit_block(node.body, fstate))
         self.inject_scope_code(fstate, root.body)
         rv.body = list(self.make_runtime_imports()) + [root]
+
+        setup = self.make_rtstate_func('setup')
+        setup.body.append(ast.Expr(self.make_call('register_block_mapping',
+            [self.make_getattr('rtstate.info'),
+             ast.Name('blocks', ast.Load())])))
+
+        blocks_keys = []
+        blocks_values = []
+        for block_node in node.find_all(nodes.Block):
+            block_fstate = fstate.derive(scope='hard')
+            block = self.make_rtstate_func('block_' + block_node.name)
+            block.body.extend(self.visit_block(block_node.body, block_fstate))
+            self.inject_scope_code(block_fstate, block.body)
+            rv.body.append(block)
+            blocks_keys.append(ast.Str(block_node.name))
+            blocks_values.append(ast.Name('block_' + block_node.name,
+                                          ast.Load()))
+
+        rv.body.append(setup)
+        rv.body.append(ast.Assign([ast.Name('blocks', ast.Store())],
+                                  ast.Dict(blocks_keys, blocks_values)))
+
         return fix_missing_locations(rv)
 
     def visit_Output(self, node, fstate):
@@ -481,11 +511,31 @@ class ASTTransformer(NodeVisitor):
         raise NotImplementedError()
 
     def visit_Extends(self, node, fstate):
-        raise NotImplementedError()
+        vars = self.context_to_lookup(fstate)
+        return [
+            ast.Assign([ast.Name('template_name', ast.Store())],
+                       self.visit(node.template, fstate)),
+            ast.Assign([ast.Name('template', ast.Store())],
+                       self.make_call('rtstate.get_template',
+                                      [ast.Name('template_name',
+                                                ast.Load())])),
+            ast.Assign([ast.Name('info', ast.Store())],
+                       self.make_call('rtstate.info.make_info',
+                                      [ast.Name('template', ast.Load()),
+                                       ast.Name('template_name', ast.Load()),
+                                       ast.Str('extends')])),
+            ast.For(ast.Name('event', ast.Store()),
+                    self.make_call('config.yield_from_template',
+                                   [ast.Name('template', ast.Load()),
+                                    ast.Name('info', ast.Load()),
+                                    vars]),
+                    [ast.Expr(ast.Yield(ast.Name('event', ast.Load())))], []),
+            ast.Return(None)
+        ]
 
     def visit_Block(self, node, fstate):
         block_name = ast.Str(node.name)
-        vars = self.locals_to_dict(fstate)
+        vars = self.context_to_lookup(fstate)
         return ast.For(ast.Name('event', ast.Store()),
                        self.make_call('rtstate.evaluate_block',
                                       [block_name, vars]),
