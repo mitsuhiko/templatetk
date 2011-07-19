@@ -93,8 +93,10 @@ class IdentTracker(NodeVisitor):
 
         if node.ctx != 'load' or not from_outer_scope:
             self.frame.local_identifiers[node.name] = local_id
+            self.frame.unassigned_until[node.name] = node
         if node.ctx == 'load' and not from_outer_scope:
             self.frame.requires_lookup[local_id] = node.name
+            self.frame.unassigned_until[node.name] = None
 
     def visit_For(self, node):
         self.visit(node.iter)
@@ -160,6 +162,8 @@ class FrameState(object):
         self.local_identifiers = {}
         self.required_aliases = {}
         self.requires_lookup = {}
+        self.unassigned_until = {}
+        self.nodes = []
         self.ident_manager = ident_manager
         self.root = root
         self.buffer = None
@@ -171,18 +175,44 @@ class FrameState(object):
         tracker = IdentTracker(self)
         for node in nodes:
             tracker.visit(node)
+            self.nodes.append(node)
 
     def add_special_identifier(self, name):
         self.analyze_identfiers([nodes.Name(name, 'store')])
 
-    def iter_vars(self):
+    def iter_vars(self, reference_node=None):
         found = set()
         for idmap in self.ident_manager.iter_identifier_maps(self):
             for name, local_id in idmap.iteritems():
                 if name in found:
                     continue
                 found.add(name)
+                if reference_node is not None and \
+                   self.var_unassigned(name, reference_node):
+                    continue
                 yield name, local_id
+
+    def var_unassigned(self, name, reference_node):
+        assigning_node = self.unassigned_until[name]
+        # assigned on block start
+        if assigning_node is None:
+            return False
+
+        for node in self.iter_frame_nodes():
+            if node is reference_node:
+                break
+            if node is assigning_node:
+                return False
+        return True
+
+    def iter_frame_nodes(self):
+        """Iterates over all nodes in the frame in the order they
+        appear.
+        """
+        for node in self.nodes:
+            yield node
+            for child in node.iter_child_nodes():
+                yield child
 
     def lookup_name(self, name, ctx):
         assert ctx in _context_target_map, 'unknown context'
@@ -341,17 +371,17 @@ class ASTTransformer(NodeVisitor):
         body[:] = before + body + [
             ast.If(ast.Num(0), [ast.Expr(ast.Yield(ast.Num(0)))], [])]
 
-    def locals_to_dict(self, fstate, lineno=None):
+    def locals_to_dict(self, fstate, reference_node, lineno=None):
         keys = []
         values = []
-        for name, local_id in fstate.iter_vars():
+        for name, local_id in fstate.iter_vars(reference_node):
             keys.append(ast.Str(name))
             values.append(ast.Name(local_id, ast.Load()))
         return ast.Dict(keys, values, lineno=lineno)
 
-    def context_to_lookup(self, fstate, lineno=None):
+    def context_to_lookup(self, fstate, reference_node, lineno=None):
         return self.make_call('MultiMappingLookup',
-            [ast.Tuple([self.locals_to_dict(fstate),
+            [ast.Tuple([self.locals_to_dict(fstate, reference_node),
                         self.make_getattr('rtstate.context')], ast.Load())],
             lineno=lineno)
 
@@ -541,7 +571,7 @@ class ASTTransformer(NodeVisitor):
                                 fstate, lineno=node.lineno)
 
     def visit_Import(self, node, fstate):
-        vars = self.context_to_lookup(fstate)
+        vars = self.context_to_lookup(fstate, node)
         lookup = self.make_template_lookup(node.template, fstate)
         info = self.make_template_info('import')
         gen = self.make_template_generator(vars)
@@ -555,7 +585,7 @@ class ASTTransformer(NodeVisitor):
         raise NotImplementedError()
 
     def visit_Include(self, node, fstate):
-        vars = self.context_to_lookup(fstate)
+        vars = self.context_to_lookup(fstate, node)
         lookup = self.make_template_lookup(node.template, fstate)
         render = self.make_template_render_call(vars, 'include')
         if node.ignore_missing:
@@ -565,14 +595,14 @@ class ASTTransformer(NodeVisitor):
         return lookup + render
 
     def visit_Extends(self, node, fstate):
-        vars = self.context_to_lookup(fstate)
+        vars = self.context_to_lookup(fstate, node)
         lookup = self.make_template_lookup(node.template, fstate)
         render = self.make_template_render_call(vars, 'extends')
         return lookup + render + [ast.Return(None)]
 
     def visit_Block(self, node, fstate):
         block_name = ast.Str(node.name)
-        vars = self.context_to_lookup(fstate)
+        vars = self.context_to_lookup(fstate, node)
         return ast.For(ast.Name('event', ast.Store()),
                        self.make_call('rtstate.evaluate_block',
                                       [block_name, vars]),
