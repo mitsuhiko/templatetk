@@ -284,17 +284,14 @@ class Import(Stmt):
 
 
 class FromImport(Stmt):
-    """A node that represents the from import tag.  It's important to not
-    pass unsafe names to the name attribute.  The compiler translates the
-    attribute lookups directly into getattr calls and does *not* use the
-    subscript callback of the interface.  As exported variables may not
-    start with double underscores (which the parser asserts) this is not a
-    problem for regular Jinja code, but if this node is used in an extension
-    extra care must be taken.
-
-    The list of names may contain tuples if aliases are wanted.
+    """A node that represents the from import tag.  The items have to be
+    FromImportItems.
     """
-    fields = ('template', 'names', 'with_context')
+    fields = ('template', 'items', 'with_context')
+
+
+class FromImportItem(Helper):
+    fields = ('target', 'name')
 
 
 class ExprStmt(Stmt):

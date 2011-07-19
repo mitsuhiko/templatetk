@@ -582,7 +582,19 @@ class ASTTransformer(NodeVisitor):
         return rv
 
     def visit_FromImport(self, node, fstate):
-        raise NotImplementedError()
+        vars = self.context_to_lookup(fstate, node)
+        lookup = self.make_template_lookup(node.template, fstate)
+        info = self.make_template_info('import')
+        gen = self.make_template_generator(vars)
+        module = self.make_call('info.make_module', [gen])
+        mod = self.ident_manager.temporary()
+        rv = lookup + [info, ast.Assign([ast.Name(mod, ast.Store())], module)]
+        for item in node.items:
+            rv.extend(self.make_assign(item.target, self.make_call(
+                'config.resolve_from_import',
+                [module, self.visit(item.name, fstate)]), fstate,
+                lineno=node.lineno))
+        return rv
 
     def visit_Include(self, node, fstate):
         vars = self.context_to_lookup(fstate, node)

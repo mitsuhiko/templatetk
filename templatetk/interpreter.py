@@ -464,11 +464,8 @@ class Interpreter(NodeVisitor):
 
     def visit_FromImport(self, node, state):
         module = self.resolve_import(node, state)
-        for name in node.names:
-            if isinstance(name, tuple):
-                name, alias = name
-            else:
-                alias = name
+        for item in node.items:
+            name = self.visit(item.name, state)
             imported_object = state.config.resolve_from_import(module, name)
-            state.assign_var(alias, imported_object)
+            assign_to_state(item.target, imported_object, state)
         return empty_iter

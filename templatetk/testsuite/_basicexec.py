@@ -656,7 +656,9 @@ class ImportTestCase(object):
         n = nodes
 
         index_template = n.Template([
-            n.FromImport(n.Const('import.html'), ['foo', ('bar', 'x')], True),
+            n.FromImport(n.Const('import.html'), [
+                n.FromImportItem(n.Name('foo', 'store'), n.Const('foo')),
+                n.FromImportItem(n.Name('x', 'store'), n.Const('bar'))], True),
             n.Output([n.Name('foo', 'load'), n.Const('|'), n.Name('x', 'load')])
         ])
         import_template = n.Template([
