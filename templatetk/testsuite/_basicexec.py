@@ -691,6 +691,18 @@ class FunctionTestCase(object):
 
         self.assert_result_matches(t, dict(), 'x: 42')
 
+    def test_as_expression(self):
+        n = nodes
+
+        t = n.Template([
+            n.Output([n.Call(n.Function(n.Const('test'),
+                [n.Name('x', 'param')], [], [
+                n.Output([n.Const('x: '), n.Name('x', 'load')])
+            ]), [n.Const(23)], [], None, None)])
+        ])
+
+        self.assert_result_matches(t, dict(), 'x: 23')
+
 
 def make_suite(test_class, module):
     import unittest
