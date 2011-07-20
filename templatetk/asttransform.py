@@ -70,7 +70,17 @@ def fix_missing_locations(node):
 
 
 class IdentTracker(NodeVisitor):
-    """A helper class that tracks the usage of identifiers."""
+    """A helper class that tracks the usage of identifiers.
+
+    Problematic cases:
+
+    -   currently if an enclosing soft scope references a variable that is
+        normally set by an outer scope but after the execution of the
+        enclosed scope you will get an NameError.  To solve this one would
+        have to track all the variables that an inner scope is intersted
+        in from the outer scope and ensure that the variables are initialized
+        by resolving from the context.
+    """
 
     def __init__(self, frame):
         NodeVisitor.__init__(self)
