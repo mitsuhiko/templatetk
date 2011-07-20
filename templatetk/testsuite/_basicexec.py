@@ -675,6 +675,23 @@ class ImportTestCase(object):
             '42|23', config=config)
 
 
+class FunctionTestCase(object):
+
+    def test_basic_function(self):
+        n = nodes
+
+        t = n.Template([
+            n.Assign(n.Name('test', 'store'), n.Function(n.Const('test'),
+                [n.Name('x', 'param')], [], [
+                n.Output([n.Const('x: '), n.Name('x', 'load')])
+            ])),
+            n.Output([n.Call(n.Name('test', 'load'), [n.Const(42)],
+                             [], None, None)])
+        ])
+
+        self.assert_result_matches(t, dict(), 'x: 42')
+
+
 def make_suite(test_class, module):
     import unittest
 
@@ -691,4 +708,5 @@ def make_suite(test_class, module):
     suite.addTest(unittest.makeSuite(mixin(InheritanceTestCase)))
     suite.addTest(unittest.makeSuite(mixin(IncludeTestCase)))
     suite.addTest(unittest.makeSuite(mixin(ImportTestCase)))
+    suite.addTest(unittest.makeSuite(mixin(FunctionTestCase)))
     return suite

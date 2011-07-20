@@ -11,7 +11,7 @@
 """
 from types import MethodType, FunctionType
 
-from .runtime import LoopContext
+from .runtime import LoopContext, Function
 from .utils import Markup
 
 
@@ -96,6 +96,9 @@ class Config(object):
 
     def make_module(self, template_name, exports, body):
         raise NotImplementedError('Cannot create modules')
+
+    def wrap_function(self, name, callable, arguments, defaults):
+        return Function(self, name, callable, arguments, defaults)
 
     def resolve_from_import(self, module, attribute):
         return self.getattr(module, attribute)

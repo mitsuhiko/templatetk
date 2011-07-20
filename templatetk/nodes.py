@@ -255,14 +255,6 @@ class If(Stmt):
     fields = ('test', 'body', 'else_')
 
 
-class Function(Stmt):
-    """Defines a function and stores it in the given target.
-    """
-    # TODO: can we define this as an expression with this new compiler?
-    # Would make things a lot easier for everything but compilation ...
-    fields = ('target', 'args', 'defaults', 'body')
-
-
 class FilterBlock(Stmt):
     """Node for filter sections."""
     fields = ('body', 'name', 'args', 'kwargs', 'dyn_args', 'dyn_kwargs')
@@ -313,6 +305,11 @@ class Expr(Node):
         return False
 
 
+class Function(Expr):
+    """Defines a function expression."""
+    fields = ('name', 'args', 'defaults', 'body')
+
+
 class BinExpr(Expr):
     """Baseclass for all binary expressions."""
     fields = ('left', 'right')
@@ -338,7 +335,7 @@ class Name(Expr):
     fields = ('name', 'ctx')
 
     def can_assign(self):
-        if self.ctx != 'store':
+        if self.ctx == 'load':
             return False
         return self.name not in ('true', 'false', 'none',
                                  'True', 'False', 'None')

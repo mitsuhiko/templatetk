@@ -407,6 +407,20 @@ class Interpreter(NodeVisitor):
             value = state.config.markup_type(self.visit(node.expr, state))
         return value
 
+    def visit_Function(self, node, state):
+        defaults = [self.visit(x, state) for x in node.defaults]
+        def _eval_func(*args):
+            state.push_frame()
+            for target, value in izip(node.args, args):
+                assign_to_state(target, value, state)
+            rv = u''.join(self.visit_block(node.body, state))
+            state.pop_frame()
+            return self.config.markup_type(rv)
+        name = self.visit(node.name, state)
+        arg_names = tuple([x.name for x in node.args])
+        return state.config.wrap_function(name, _eval_func, arg_names,
+                                          defaults)
+
     def visit_Scope(self, node, state):
         with state.frame():
             for event in self.visit_block(node.body, state):

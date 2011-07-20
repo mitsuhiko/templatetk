@@ -380,10 +380,12 @@ class ASTTransformer(NodeVisitor):
         return ast.Dict(keys, values, lineno=lineno)
 
     def context_to_lookup(self, fstate, reference_node, lineno=None):
+        locals = self.locals_to_dict(fstate, reference_node)
+        if not locals.keys:
+            return self.make_getattr('rtstate.context')
         return self.make_call('MultiMappingLookup',
-            [ast.Tuple([self.locals_to_dict(fstate, reference_node),
-                        self.make_getattr('rtstate.context')], ast.Load())],
-            lineno=lineno)
+            [ast.Tuple([locals, self.make_getattr('rtstate.context')],
+                       ast.Load())], lineno=lineno)
 
     def make_assign(self, target, expr, fstate, lineno=None):
         assert isinstance(target, nodes.Name), 'can only assign to names'

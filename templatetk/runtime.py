@@ -110,6 +110,35 @@ class RuntimeInfo(object):
                                        body)
 
 
+class Function(object):
+    """Wraps a function.  Currently pretty much a noop but can be used
+    to further customize the calling behavior.
+    """
+
+    def __init__(self, config, name, callable, arguments, defaults):
+        self.__name__ = name
+        self._config = config
+        self._callable = callable
+        self._arguments = arguments
+        self._arg_count = len(arguments)
+        self._defaults = defaults
+
+    def __call__(self, *args, **kwargs):
+        pos_args = list(args[:self._arg_count])
+        off = len(args)
+        if off != self._arg_count:
+            for idx, name in enumerate(self._arguments[:len(pos_args)]):
+                try:
+                    value = kwargs.pop(name)
+                except KeyError:
+                    try:
+                        value = self._defaults[idx - self._arg_count + off]
+                    except IndexError:
+                        value = self._config.undefined_variable(name)
+                pos_args.append(value)
+        return self._callable(*pos_args)
+
+
 class LoopContextBase(object):
     """Base implementation for a loop context.  Solves most problems a
     loop context has to solve and implements the base interface that is
