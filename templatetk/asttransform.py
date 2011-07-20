@@ -91,10 +91,13 @@ class IdentTracker(NodeVisitor):
                 self.frame.required_aliases[local_id] = old
             break
 
+        if node.ctx == 'param':
+            self.frame.parameters.add(node.name)
         if node.ctx != 'load' or not from_outer_scope:
             self.frame.local_identifiers[node.name] = local_id
             self.frame.unassigned_until[node.name] = node
-        if node.ctx == 'load' and not from_outer_scope:
+        if node.ctx == 'load' and not from_outer_scope and \
+           node.name not in self.frame.parameters:
             self.frame.requires_lookup[local_id] = node.name
             self.frame.unassigned_until[node.name] = None
 
@@ -106,6 +109,11 @@ class IdentTracker(NodeVisitor):
 
     def vist_Block(self):
         pass
+
+    def visit_Function(self, node):
+        self.visit(node.name)
+        for arg in node.defaults:
+            self.visit(arg)
 
     def visit_FilterBlock(self, node):
         for arg in node.args:
@@ -142,9 +150,9 @@ class IdentManager(object):
     def iter_identifier_maps(self, start, stop_at_hard=True):
         ptr = start
         while ptr is not None:
+            yield ptr.local_identifiers
             if stop_at_hard and ptr.scope == 'hard':
                 break
-            yield ptr.local_identifiers
             ptr = ptr.parent
 
     def temporary(self):
@@ -163,6 +171,8 @@ class FrameState(object):
         self.required_aliases = {}
         self.requires_lookup = {}
         self.unassigned_until = {}
+        self.parameters = set()
+        self.inner_functions = []
         self.nodes = []
         self.ident_manager = ident_manager
         self.root = root
@@ -362,14 +372,19 @@ class ASTTransformer(NodeVisitor):
         for alias, old_name in fstate.required_aliases.iteritems():
             before.append(ast.Assign([ast.Name(alias, ast.Store())],
                                      ast.Name(old_name, ast.Load())))
+        for inner_func in fstate.inner_functions:
+            before.extend(inner_func)
 
         for target, sourcename in fstate.requires_lookup.iteritems():
             before.append(ast.Assign([ast.Name(target, ast.Store())],
                 self.make_call('rtstate.lookup_var',
                                [ast.Str(sourcename)])))
 
-        body[:] = before + body + [
-            ast.If(ast.Num(0), [ast.Expr(ast.Yield(ast.Num(0)))], [])]
+        dummy_yield = []
+        if fstate.buffer is None:
+            dummy_yield.append(ast.If(ast.Num(0),
+                [ast.Expr(ast.Yield(ast.Num(0)))], []))
+        body[:] = before + body + dummy_yield
 
     def locals_to_dict(self, fstate, reference_node, lineno=None):
         keys = []
@@ -702,6 +717,37 @@ class ASTTransformer(NodeVisitor):
         return ast.IfExp(self.make_getattr('rtstate.info.autoescape'),
                          self.make_call('config.markup_type', [value]),
                          value)
+
+    def visit_Function(self, node, fstate):
+        name = self.visit(node.name, fstate)
+        defaults = ast.List([self.visit(x, fstate) for x in node.defaults],
+                            ast.Load())
+        arg_names = ast.Tuple([ast.Str(x.name) for x in node.args], ast.Load())
+        buffer_name = self.ident_manager.temporary()
+        func_fstate = fstate.derive(scope='hard')
+        func_fstate.analyze_identfiers(node.args)
+        func_fstate.analyze_identfiers(node.body)
+        func_fstate.buffer = buffer_name
+
+        internal_name = fstate.ident_manager.temporary()
+        body = [ast.Assign([ast.Name(buffer_name, ast.Store())],
+                           ast.List([], ast.Load()))]
+        body.extend(self.visit_block(node.body, func_fstate))
+        funcargs = ast.arguments([self.visit(x, func_fstate)
+                                  for x in node.args], None, None, [])
+        self.inject_scope_code(func_fstate, body)
+        body.append(ast.Return(self.make_call('rtstate.concat_template_block',
+            [ast.Name(buffer_name, ast.Load())])))
+
+        fstate.inner_functions.append((
+            ast.FunctionDef(internal_name, funcargs, body, [],
+                            lineno=node.lineno),
+            ast.Assign([ast.Name(internal_name, ast.Store())],
+                       self.make_call('rtstate.config.wrap_function',
+                       [name, ast.Name(internal_name, ast.Load()),
+                        arg_names, defaults], lineno=node.lineno))
+        ))
+        return ast.Name(internal_name, ast.Load())
 
     def visit_Slice(self, node, fstate):
         start = self.visit(node.start, fstate)
