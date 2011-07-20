@@ -724,7 +724,7 @@ class ASTTransformer(NodeVisitor):
                             ast.Load())
         arg_names = ast.Tuple([ast.Str(x.name) for x in node.args], ast.Load())
         buffer_name = self.ident_manager.temporary()
-        func_fstate = fstate.derive(scope='hard')
+        func_fstate = fstate.derive()
         func_fstate.analyze_identfiers(node.args)
         func_fstate.analyze_identfiers(node.body)
         func_fstate.buffer = buffer_name

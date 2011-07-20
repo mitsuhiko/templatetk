@@ -703,6 +703,20 @@ class FunctionTestCase(object):
 
         self.assert_result_matches(t, dict(), 'x: 23')
 
+    def test_scoping(self):
+        n = nodes
+
+        t = n.Template([
+            n.Assign(n.Name('y', 'store'), n.Const(42)),
+            n.Output([n.Call(n.Function(n.Const('test'),
+                [n.Name('x', 'param')], [], [
+                n.Output([n.Name('y', 'load'), n.Const(' '),
+                          n.Name('x', 'load')])
+            ]), [n.Const(23)], [], None, None)])
+        ])
+
+        self.assert_result_matches(t, dict(), '42 23')
+
 
 def make_suite(test_class, module):
     import unittest
