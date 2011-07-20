@@ -739,6 +739,10 @@ class ASTTransformer(NodeVisitor):
         body.append(ast.Return(self.make_call('rtstate.info.concat_template_data',
             [ast.Name(buffer_name, ast.Load())])))
 
+        # XXX: because inner_functions are prepended, the config alias is not
+        # yet set up so we have to use rtstate.config.  Is that bad?  I mean,
+        # it's certainly not beautiful, but not sure what beautiful solution
+        # would look like.
         fstate.inner_functions.append((
             ast.FunctionDef(internal_name, funcargs, body, [],
                             lineno=node.lineno),
