@@ -70,10 +70,14 @@ class RuntimeInfo(object):
             raise RuntimeError('Test %r not found' % name)
 
     def call_block_filter(self, name, buffered_block, args, kwargs):
-        data = u''.join(buffered_block)
+        data = self.concat_template_data(buffered_block)
+        return self.call_filter(name, data, args, kwargs)
+
+    def concat_template_data(self, buffered_data):
+        data = u''.join(buffered_data)
         if self.autoescape:
             data = self.config.markup_type(data)
-        return self.call_filter(name, data, args, kwargs)
+        return data
 
     def call_filter(self, name, obj, args, kwargs):
         func = self.get_filter(name)

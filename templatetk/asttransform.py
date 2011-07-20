@@ -736,7 +736,7 @@ class ASTTransformer(NodeVisitor):
         funcargs = ast.arguments([self.visit(x, func_fstate)
                                   for x in node.args], None, None, [])
         self.inject_scope_code(func_fstate, body)
-        body.append(ast.Return(self.make_call('rtstate.concat_template_block',
+        body.append(ast.Return(self.make_call('rtstate.info.concat_template_data',
             [ast.Name(buffer_name, ast.Load())])))
 
         fstate.inner_functions.append((

@@ -137,10 +137,6 @@ class RuntimeState(object):
         """Called by the runtime for toplevel assignments."""
         self.info.exports[name] = value
 
-    def concat_template_block(self, buffer):
-        """Takes a list, concatenates the strings and wraps it."""
-        return self.config.markup_type(u''.join(buffer))
-
     def lookup_var(self, name):
         """The compiled code will try to find unknown variables with the
         help of this function.  This is the bytecode compiled equivalent
