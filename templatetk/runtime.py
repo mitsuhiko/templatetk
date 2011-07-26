@@ -116,6 +116,9 @@ class RuntimeInfo(object):
         return self.config.make_module(self.template_name, self.exports,
                                        body)
 
+    def make_callout_context(self, lookup):
+        return self.config.make_callout_context(self, lookup)
+
 
 class Function(object):
     """Wraps a function.  Currently pretty much a noop but can be used

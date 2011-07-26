@@ -707,6 +707,9 @@ class ASTTransformer(NodeVisitor):
                        [ast.Expr(ast.Yield(ast.Name('event', ast.Load())))],
                        [], lineno=node.lineno)
 
+    def visit_CallOut(self, node, fstate):
+        raise NotImplementedError()
+
     def visit_Name(self, node, fstate):
         name = fstate.lookup_name(node.name, node.ctx)
         ctx = self.make_target_context(node.ctx)

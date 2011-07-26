@@ -288,6 +288,14 @@ class Interpreter(NodeVisitor):
         assign_to_state(node.target, value, state)
         return empty_iter
 
+    def visit_CallOut(self, node, state):
+        callback = self.visit(node.callback, state)
+        ctx = state.info.make_callout_context(state)
+        for event in callback(ctx):
+            yield event
+        for key, value in state.config.callout_context_changes(ctx):
+            state.assign_var(key, value)
+
     def visit_Name(self, node, state):
         assert node.ctx == 'load', 'visiting store nodes does not make sense'
         return state.resolve_var(node.name)

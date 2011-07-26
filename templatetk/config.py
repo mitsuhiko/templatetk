@@ -97,6 +97,12 @@ class Config(object):
     def make_module(self, template_name, exports, body):
         raise NotImplementedError('Cannot create modules')
 
+    def make_callout_context(self, info, lookup):
+        raise NotImplementedError('Cannot create callout contexts')
+
+    def callout_context_changes(self, callout_context):
+        raise NotImplementedError('Cannot find callout context changes')
+
     def wrap_function(self, name, callable, arguments, defaults):
         return Function(self, name, callable, arguments, defaults)
 

@@ -296,6 +296,14 @@ class Assign(Stmt):
     fields = ('target', 'node')
 
 
+class CallOut(Stmt):
+    """A node that freezes the context down and into a dict, calls a
+    callback and then restores the context which might be modified by the
+    callback.
+    """
+    fields = ('callback',)
+
+
 class Expr(Node):
     """Baseclass for all expressions."""
     abstract = True

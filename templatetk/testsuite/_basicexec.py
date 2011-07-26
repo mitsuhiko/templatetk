@@ -23,6 +23,21 @@ class _SimpleTemplate(object):
         self.test_case = test_case
 
 
+class _CallOutContext(object):
+
+    def __init__(self, lookup):
+        self.lookup = lookup
+        self.local_changes = {}
+
+    def __getitem__(self, key):
+        if key in self.local_changes:
+            return key
+        return self.lookup[key]
+
+    def __setitem__(self, key, value):
+        self.local_changes[key] = value
+
+
 class BasicExecTestCase(TemplateTestCase):
 
     def assert_result_matches(self, node, ctx, expected, config=None):
@@ -63,6 +78,10 @@ class BasicExecTestCase(TemplateTestCase):
                 return test_case.iter_template_blocks(template, self)
             def make_module(self, template_name, exports, body):
                 return Module(template_name, exports, ''.join(body))
+            def make_callout_context(self, info, lookup):
+                return _CallOutContext(lookup)
+            def callout_context_changes(self, callout_context):
+                return callout_context.local_changes.iteritems()
         return CustomConfig()
 
     def find_ctx_config(self, ctx, config, node):
@@ -736,6 +755,28 @@ class FunctionTestCase(object):
         self.assert_result_matches(t, dict(y=1), '1 2 3 2')
 
 
+class CallOutTestCase(object):
+
+    def test_basic_callout(self):
+        def callback(context):
+            old_var = context['var']
+            context['var'] = 42
+            yield unicode(old_var)
+
+        n = nodes
+
+        t = n.Template([
+            n.Assign(n.Name('var', 'store'), n.Const(23)),
+            n.CallOut(n.Name('callback', 'load')),
+            n.Output([n.Const('|')]),
+            n.Output([n.Name('var', 'load')])
+        ])
+
+        config = self.make_inheritance_config({})
+        self.assert_result_matches(t, dict(callback=callback),
+                                   '23|42', config=config)
+
+
 def make_suite(test_class, module):
     import unittest
 
@@ -753,4 +794,5 @@ def make_suite(test_class, module):
     suite.addTest(unittest.makeSuite(mixin(IncludeTestCase)))
     suite.addTest(unittest.makeSuite(mixin(ImportTestCase)))
     suite.addTest(unittest.makeSuite(mixin(FunctionTestCase)))
+    suite.addTest(unittest.makeSuite(mixin(CallOutTestCase)))
     return suite
