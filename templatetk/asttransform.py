@@ -708,7 +708,23 @@ class ASTTransformer(NodeVisitor):
                        [], lineno=node.lineno)
 
     def visit_CallOut(self, node, fstate):
-        raise NotImplementedError()
+        callback = self.visit(node.callback, fstate)
+        vars = self.context_to_lookup(fstate, node)
+        ctx = self.make_call('rtstate.info.make_callout_context', [vars])
+        ctxname = fstate.ident_manager.temporary()
+        rv = [
+            ast.Assign([ast.Name(ctxname, ast.Store())], ctx),
+            ast.For(ast.Name('event', ast.Store()),
+                      ast.Call(callback, [ast.Name(ctxname, ast.Load())], [],
+                               None, None),
+                      [self.write_output(ast.Name('event', ast.Load()),
+                                         fstate)], [])
+        ]
+        for sourcename, local_id in fstate.local_identifiers.iteritems():
+            rv.append(ast.Assign([ast.Name(local_id, ast.Store())],
+                self.make_call('config.resolve_callout_var',
+                    [ast.Name(ctxname, ast.Load()), ast.Str(sourcename)])))
+        return rv
 
     def visit_Name(self, node, fstate):
         name = fstate.lookup_name(node.name, node.ctx)

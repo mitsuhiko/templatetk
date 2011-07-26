@@ -31,7 +31,7 @@ class _CallOutContext(object):
 
     def __getitem__(self, key):
         if key in self.local_changes:
-            return key
+            return self.local_changes[key]
         return self.lookup[key]
 
     def __setitem__(self, key, value):

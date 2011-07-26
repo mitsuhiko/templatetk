@@ -108,3 +108,6 @@ class Config(object):
 
     def resolve_from_import(self, module, attribute):
         return self.getattr(module, attribute)
+
+    def resolve_callout_var(self, callout_ctx, name):
+        return callout_ctx[name]
