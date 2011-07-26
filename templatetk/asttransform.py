@@ -89,6 +89,7 @@ class IdentTracker(NodeVisitor):
     def visit_Name(self, node):
         from_outer_scope = False
         local_id = self.frame.ident_manager.encode(node.name)
+
         for idmap in self.frame.ident_manager.iter_identifier_maps(self.frame):
             if node.name not in idmap:
                 continue
@@ -110,6 +111,10 @@ class IdentTracker(NodeVisitor):
            node.name not in self.frame.parameters:
             self.frame.requires_lookup[local_id] = node.name
             self.frame.unassigned_until[node.name] = None
+
+        self.frame.referenced_identifiers[node.name] = local_id
+        if from_outer_scope:
+            self.frame.from_outer_scope.add(node.name)
 
     def visit_For(self, node):
         self.visit(node.iter)
@@ -177,19 +182,51 @@ class FrameState(object):
         self.config = config
         self.parent = parent
         self.scope = scope
+
+        # a map of all identifiers that are active for this current frame.
+        # The key is the actual name in the source (y), the value is the
+        # name of the local identifier (l_y_0 for instance).
         self.local_identifiers = {}
+
+        # A set of all source names (y) that were referenced from an outer
+        # scope at any point in the execution.
+        self.from_outer_scope = set()
+
+        # Like `local_identifiers` but also includes identifiers that were
+        # referenced from an outer scope.
+        self.referenced_identifiers = {}
+
+        # Variables that need to have aliases set up.  The key is the
+        # new local name (as in local_identifiers ie: l_y_1) and the value
+        # is the old name (l_y_0)
         self.required_aliases = {}
+
+        # variables that require lookup.  The key is the local id (l_y_0),
+        # the value is the sourcename (y).
         self.requires_lookup = {}
+
+        # A helper mapping that stores for each source name (y) the node
+        # that assigns it.  This is used to to figure out if a variable is
+        # assigned at the beginning of the block or later.  If the source
+        # node is `None` it means the variable is assigned at the very top.
         self.unassigned_until = {}
+
+        # variables that are declared in this scope as parameters.  This is
+        # a set of all source names (y).
         self.parameters = set()
+
         self.inner_functions = []
+        self.inner_frames = []
         self.nodes = []
         self.ident_manager = ident_manager
         self.root = root
         self.buffer = None
 
-    def derive(self, scope='soft'):
-        return self.__class__(self.config, self, scope, self.ident_manager)
+    def derive(self, scope='soft', record=True):
+        rv = self.__class__(self.config, self, scope, self.ident_manager)
+        if record:
+            self.inner_frames.append(rv)
+        return rv
 
     def analyze_identfiers(self, nodes):
         tracker = IdentTracker(self)
@@ -224,6 +261,19 @@ class FrameState(object):
             if node is assigning_node:
                 return False
         return True
+
+    def iter_inner_referenced_vars(self):
+        """Iterates over all variables that are referenced by any of the
+        inner frame states from this frame state.  This way we can exactly
+        know what variables need to be resolved by an outer frame.
+        """
+        for inner_frame in self.inner_frames:
+            for name, local_id in inner_frame.referenced_identifiers.iteritems():
+                if name not in inner_frame.from_outer_scope:
+                    continue
+                if local_id in inner_frame.required_aliases:
+                    local_id = inner_frame.required_aliases[local_id]
+                yield local_id, name
 
     def iter_frame_nodes(self):
         """Iterates over all nodes in the frame in the order they
@@ -379,13 +429,20 @@ class ASTTransformer(NodeVisitor):
 
     def inject_scope_code(self, fstate, body):
         before = []
+
         for alias, old_name in fstate.required_aliases.iteritems():
             before.append(ast.Assign([ast.Name(alias, ast.Store())],
                                      ast.Name(old_name, ast.Load())))
         for inner_func in fstate.inner_functions:
             before.extend(inner_func)
 
-        for target, sourcename in fstate.requires_lookup.iteritems():
+        # at that point we know about the inner states and can see if any
+        # of them need variables we do not have yet assigned and we have to
+        # resolve for them.
+        requires_lookup = dict(fstate.requires_lookup)
+        requires_lookup.update(fstate.iter_inner_referenced_vars())
+
+        for target, sourcename in requires_lookup.iteritems():
             before.append(ast.Assign([ast.Name(target, ast.Store())],
                 self.make_call('rtstate.lookup_var',
                                [ast.Str(sourcename)])))

@@ -717,6 +717,24 @@ class FunctionTestCase(object):
 
         self.assert_result_matches(t, dict(), '42 23')
 
+    def test_problematic_scoping(self):
+        n = nodes
+
+        t = n.Template([
+            n.Assign(n.Name('test', 'store'), n.Function(n.Const('test'),
+                [n.Name('x', 'param')], [], [
+                n.Output([n.Name('y', 'load'), n.Const(' '),
+                          n.Name('x', 'load')])
+            ])),
+            n.Output([n.Call(n.Name('test', 'load'), [n.Const(2)],
+                             [], None, None), n.Const(' ')]),
+            n.Assign(n.Name('y', 'store'), n.Const(3)),
+            n.Output([n.Call(n.Name('test', 'load'), [n.Const(2)],
+                             [], None, None)])
+        ])
+
+        self.assert_result_matches(t, dict(y=1), '1 2 3 2')
+
 
 def make_suite(test_class, module):
     import unittest
