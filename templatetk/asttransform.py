@@ -428,6 +428,12 @@ class ASTTransformer(NodeVisitor):
                         args, kwargs, dyn_args, dyn_kwargs)
 
     def inject_scope_code(self, fstate, body):
+        """This has to be called just before doing any modifications on the
+        scoped code and after all inner frames were visisted.  This is required
+        because the injected code will also need the knowledge of the inner
+        frames to know which identifiers are required to lookup in the outer
+        frame that the outer frame might not need.
+        """
         before = []
 
         for alias, old_name in fstate.required_aliases.iteritems():
