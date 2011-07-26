@@ -87,6 +87,9 @@ class RuntimeInfo(object):
         func = self.get_test(name)
         return func(obj, *args, **kwargs)
 
+    def call(self, obj, args, kwargs):
+        return obj(*args, **kwargs)
+
     def register_block(self, name, executor):
         self.block_executers.setdefault(name, []).append(executor)
 

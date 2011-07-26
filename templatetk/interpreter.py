@@ -305,7 +305,7 @@ class Interpreter(NodeVisitor):
     def visit_Call(self, node, state):
         obj = self.visit(node.node, state)
         args, kwargs = self.resolve_call_args(node, state)
-        return obj(*args, **kwargs)
+        return state.info.call(obj, args, kwargs)
 
     def visit_Keyword(self, node, state):
         return node.key, self.visit(node.value, state)

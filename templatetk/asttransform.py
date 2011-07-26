@@ -88,27 +88,27 @@ class IdentTracker(NodeVisitor):
 
     def visit_Name(self, node):
         from_outer_scope = False
+        reused_local_id = False
         local_id = self.frame.ident_manager.encode(node.name)
 
         for idmap in self.frame.ident_manager.iter_identifier_maps(self.frame):
             if node.name not in idmap:
                 continue
-            from_outer_scope = True
             local_id = idmap[node.name]
-            if idmap is not self.frame.local_identifiers \
-               and node.ctx != 'load':
-                old = local_id
-                local_id = self.frame.ident_manager.override(node.name)
-                self.frame.required_aliases[local_id] = old
+            reused_local_id = True
+            if idmap is not self.frame.local_identifiers:
+                from_outer_scope = True
+                if node.ctx != 'load':
+                    old = local_id
+                    local_id = self.frame.ident_manager.override(node.name)
+                    self.frame.required_aliases[local_id] = old
             break
 
-        if node.ctx == 'param':
-            self.frame.parameters.add(node.name)
-        if node.ctx != 'load' or not from_outer_scope:
+        if node.ctx != 'load' or not reused_local_id:
             self.frame.local_identifiers[node.name] = local_id
-            self.frame.unassigned_until[node.name] = node
-        if node.ctx == 'load' and not from_outer_scope and \
-           node.name not in self.frame.parameters:
+            unassigned_until = node.ctx != 'param' and node or None
+            self.frame.unassigned_until[node.name] = unassigned_until
+        if node.ctx == 'load' and not reused_local_id:
             self.frame.requires_lookup[local_id] = node.name
             self.frame.unassigned_until[node.name] = None
 
@@ -211,10 +211,6 @@ class FrameState(object):
         # node is `None` it means the variable is assigned at the very top.
         self.unassigned_until = {}
 
-        # variables that are declared in this scope as parameters.  This is
-        # a set of all source names (y).
-        self.parameters = set()
-
         self.inner_functions = []
         self.inner_frames = []
         self.nodes = []
@@ -235,7 +231,7 @@ class FrameState(object):
             self.nodes.append(node)
 
     def add_special_identifier(self, name):
-        self.analyze_identfiers([nodes.Name(name, 'store')])
+        self.analyze_identfiers([nodes.Name(name, 'param')])
 
     def iter_vars(self, reference_node=None):
         found = set()
@@ -730,15 +726,9 @@ class ASTTransformer(NodeVisitor):
 
     def visit_Call(self, node, fstate):
         obj = self.visit(node.node, fstate)
-        args = [self.visit(x, fstate) for x in node.args]
-        kwargs = [self.visit(kw, fstate) for kw in node.kwargs]
-        dyn_args = dyn_kwargs = None
-        if node.dyn_args is not None:
-            dyn_args = self.visit(node.dyn_args, fstate)
-        if node.dyn_kwargs is not None:
-            dyn_kwargs = self.visit(node.dyn_kwargs, fstate)
-        return ast.Call(obj, args, kwargs, dyn_args, dyn_kwargs,
-                        lineno=node.lineno)
+        call_args = self.make_resolve_call(node, fstate)
+        return self.make_call('rtstate.info.call', [obj], call_args,
+                              lineno=node.lineno)
 
     def visit_Const(self, node, fstate):
         return self.make_const(node.value, fstate)
