@@ -768,12 +768,6 @@ class ASTTransformer(NodeVisitor):
         return self.make_call('rtstate.info.call_filter',
             [ast.Str(node.name), value], filter_args, lineno=node.lineno)
 
-    def visit_Test(self, node, fstate):
-        value = self.visit(node.node, fstate)
-        filter_args = self.make_resolve_call(node, fstate)
-        return self.make_call('rtstate.info.call_test',
-            [ast.Str(node.name), value], filter_args, lineno=node.lineno)
-
     def visit_CondExpr(self, node, fstate):
         test = self.visit(node.test, fstate)
         true = self.visit(node.true, fstate)

@@ -25,7 +25,6 @@ class RuntimeInfo(object):
         self.autoescape = config.get_autoescape_default(template_name)
         self.volatile = False
         self.filters = config.get_filters()
-        self.tests = config.get_tests()
         self.block_executers = {}
         self.template_cache = {}
         self.exports = {}
@@ -62,12 +61,6 @@ class RuntimeInfo(object):
             return self.filters[name]
         except KeyError:
             raise RuntimeError('Filter %r not found' % name)
-
-    def get_test(self, name):
-        try:
-            return self.tests[name]
-        except KeyError:
-            raise RuntimeError('Test %r not found' % name)
 
     def call_block_filter(self, name, buffered_block, args, kwargs):
         data = self.concat_template_data(buffered_block)

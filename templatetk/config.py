@@ -76,9 +76,6 @@ class Config(object):
     def get_filters(self):
         return {}
 
-    def get_tests(self):
-        return {}
-
     def wrap_loop(self, iterator, parent=None):
         return LoopContext(iterator)
 
