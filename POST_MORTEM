@@ -1,0 +1,358 @@
+Django Template Compilation Post Mortem
+=======================================
+
+This project started out as an attempt to generate a general utility
+library to make template compilation for Django possible and also to shift
+the general code generation step from within each template engine into a
+separate library everybody can take advantage of.  Unfortunately however
+the project did not went as well as hoped for different reasons.
+
+This report has a short summary of the reasons why it failed, what lessons
+can be learned from that and what's a possible way forward for both
+Django's template engine and the separate compilation library.
+
+
+Django's Template Engine
+------------------------
+
+To people that are familiar with the Django template engine it basically
+an implementation of the interpreter pattern after the GoF.  You have a
+tree of nodes and each node has a method that can evaluate the node
+against a specific runtime state (the context) and returns its results as
+a string.  This is also often commonly referred to as an AST interpreter.
+
+The cool thing about that design is that it allows runtime introspection
+of all parts of the template engine which is also taken advantage of by
+the template inheritance.  You can at runtime walk the tree to extract
+information from the nodes.  Another interesting aspect of the Django
+template engine is that there is “compile time state” on the parser which
+is used to inform the parser about available filters and tags in this
+template.  This information usually is lost for most nodes at runtime.
+
+The node baseclass has no interface besides the enumeration of child nodes
+and the rendering.  As such a node does not necessarily keep relevant
+information from the parser around at runtime.  In fact no node class
+known to me keeps that information.  For instance if a node has an
+expression attached that needs a filter that was loaded by the template a
+reference to the filter directly is stored.  This is not a problem, but an
+interesting observation.
+
+The actual problem with the core concept of the template engine is that
+it's perceived as slow.  The reasons behind the slow execution can be
+attributed to a couple of factors:
+
+1.  The most important one is that you have a lot of function calls on the
+    engine.  Each node invokes another node and you do a lot of function
+    calls for every basic operations such as looping and printing a
+    variable therein.
+2.  All variables are stored in a multi level dictionary called the
+    context.  Since this is the case you cannot easily “cache” references
+    and always have to do a dict lookup and store.  Furthermore even
+    information that might not be necessary is provided (current loop
+    index, number of items in a loop etc.)  Since the context has multiple
+    levels each miss will mean another dict lookup raising the general
+    complexity of a lookup to ``O(n)`` in the worst case where `n` is the
+    height of the context.  Each loop, each condition, each block raise
+    the level and further slow down each lookup (not store though).
+3.  The interface for the render method is defined as returning a string
+    which means that each time you are dealing with a node that has a body
+    the template engine has to do buffering and string concatenation.
+    Again this shows up as a problem when dealing with a lot of nesting
+    and huge templates.
+
+All of this normally could easily be fixed but unfortunately the design of
+the template engine is not an implementation detail but an exposed API and
+heavily used by both Django and users.
+
+What makes Jinja2 Fast
+----------------------
+
+On the surface both Jinja2 and Django look very much alike.  In fact you
+could probably implement a large portion of the Django template engine on
+top of Jinja2 and the basic templates would work without any changes.
+However what makes Jinja2 fast is a combination of a few factors that
+ultimately do not work with the Django template engine:
+
+Both Jinja2 and Django have nodes that represent the template but the
+behavior is different.  Jinja2 nodes have a very specific semantic and are
+converted by the compiler into Python bytecode.  In contrast Django's
+nodes are used at runtime to evaluate the template code and each node can
+come up with its own semantics.
+
+The fact that each node has different semantics and can potentially do
+anything makes it impossible for the compiler to make any assumptions.  No
+optimization is possible here.  Jinja2 not only assigns specific compile
+time introspectable semantics to the nodes, it also sets up a few
+constraints for the templating language that enable optimizations.
+
+For instance take this template::
+
+    {% for item in seq %}
+        <li>{{ item }}
+        ...
+    {% endfor %}
+
+Jinja2 can compile this into bytecode that roughly resembles this::
+
+    from jinja2.runtime import missing
+    name = None
+
+    def root(context):
+        l_seq = context.resolve('seq')
+        yield u'\n'
+        for l_item in l_seq:
+            yield u'\n    <li>%s\n' % (
+                l_item, 
+            )
+            ...
+        l_item = missing
+
+In constrast if we would take what Django allows at runtime we would have
+to compile it to something like this::
+
+    from nonexistingdjango.runtime import missing
+    name = None
+
+    def root(context):
+        rv = []
+        rv.append(u'\n')
+        context.push()
+        tmp_0 = 0
+
+        try:
+            values = context['seq']
+        except VariableDoesNotExist:
+            values = []
+        if values is None:
+            values = []
+        if not hasattr(values, '__len__'):
+            values = list(values)
+        len_values = len(values)
+        parentloop = context.get('forloop', {})
+        loop_dict = context['forloop'] = {'parentloop': parentloop}
+        for i, context['item'] in enumerate(context['seq']):
+            loop_dict['counter0'] = i
+            loop_dict['counter'] = i + 1
+            loop_dict['revcounter'] = len_values - i
+            loop_dict['revcounter0'] = len_values - i - 1
+            loop_dict['first'] = (i == 0)
+            loop_dict['last'] = (i == len_values - 1)
+            rv.append(u'\n    <li>%s\n' % context['item'])
+            ...
+        context.pop()
+        return u''.join(rv)
+
+The obvious difference between the two is that the code we would have to
+compile for Django templates is a lot longer.  Why is that the case?  The
+answer is quite simple: In Django we cannot reliably proof that a variable
+ends up being unused.  In the above example the “…” symbolizes any other
+template expression or tag.  Since that tag might need the forloop
+variable in Django's case we have to generate the forloop context.  In
+Jinja2 the semantics are fixed and we can at compile time analyze if a
+forloop is used or not.  In this case Jinja2 detected that nobody is
+interested in the loop index and did not generate it.
+
+How would the code look like if ``{{ loop.index }}`` was used in Jinja2?
+
+::
+
+    from jinja2.runtime import missing, LoopContext
+
+    def root(context, environment=environment):
+        l_seq = context.resolve('seq')
+        yield u'\n'
+        l_item = missing
+        for l_item, l_loop in LoopContext(l_seq):
+            yield u'\n    <li>%s: %s\n' % (
+                environment.getattr(l_loop, 'index'), 
+                l_item
+            )
+        l_item = missing
+
+Still not nearly as frightening.  Again Jinja2 here has the advantage that
+it never created a loop context as dict in the first place.  The
+``l_loop`` variable that shows up here is the `LoopContext` itself.  The
+``__iter__`` method of the loop context yields the item from the passed
+iterable and also yields a reference to itself.  The nice effect of that
+is that Jinja2 does not have to convert the iterable into a list with a
+length until someone actively accesses an attribute of ``l_loop`` that
+depends on the length of the iterable (like `revcounter`).
+
+However this is not where the speed comes from.  The real impact is that
+Jinja2 does not do any dict lookups in the loop.  In fact the whole thing
+does exactly one dict lookup: when it resolves the variable from the
+context.  Once it did that it never stores variables back into the context
+and keeps it as local variable.  Local variables in Python do not require
+dict lookups or stores and are a lot faster than dict lookups that Django
+has to use.
+
+Additionally the stacked nature of the Django/Jinja2 scoping is
+implemented by cleverly aliasing variables in Jinja2's case whereas Django
+has to use an actual stack.
+
+The Failed Attempt
+------------------
+
+All of this was known before the project started but the idea was to
+additionally introduce a new method on the node object that creates a
+templatetk node that can be compiled.  The default would generate a call
+to the render method and just buffer up the results.
+
+However this was a failure for a couple of different reasons.  The first
+and foremost one is that it's a maintenance nightmare for Django since for
+this to be even remotely fast each core tag would have to be implemented
+twice: once for the render and once for the compilation.  Secondly a
+combined implementation that still supports the old API is just slow.  Not
+only does not even yield any performance improvements but has the opposite
+effect in practice.  I did the experiment where I took a node tree from a
+template and just replaced the loops and if tags with hand written code
+that would be the result of the compilation and the overall performance
+was about 20% worse than the naive interpreter.
+
+The reason for that is that whenever we have to dispatch to a regular node
+it has to create a new context and that context would have to respond to
+the current context interface including request contexts and more.
+Creating this object is a costly operation and throwing it away when
+returning to the compiled code leaves a hit on performance as well.
+
+The templatetk backend can track the life of an identifier in the template
+and the idea was that for as long as no custom tag was accessed we don't
+have to store it back into the context.  However it turns out that except
+for loops identifiers are usually only accessed once so nothing is gained
+from that.  Custom tags are common and creating the new context object
+when it's necessary is an expensive operation.
+
+A Better Approach
+-----------------
+
+During the course of the GSOC project it became obvious that the API of
+the template engine customization would have to improve for the template
+compilation to work.  But this also has other benefits than just making
+the execution faster or reducing the memory footprint: it would safe
+developer time by factoring out common scenarios into a nicer API.
+
+If we look at all the API decisions in Django's template engine that would
+be worth revisiting (not only from a performance POV) it becomes obvious
+that a cleanup of the API would be beneficial to users as well:
+
+1.  The parsing interface is very low level and could be improved.  If
+    users would provide a basic grammar description for the syntax of
+    custom nodes it would benefit the template designer (unified behavior
+    of tags since developers declare parts as “expression” instead of hand
+    parsing expressions in various different ways and ending up with
+    different semantics all over the place).
+2.  Writing custom tags can be a complex endeavour and involves a lot of
+    unnecessary repetition and working with low level interfaces.  Most of
+    the time a tag falls into one of three categories anyways (load
+    something and render it, load something and assign it to a var,
+    enclose something in a tag and modify the context beforehand) so it
+    would be beneficial for the user to have a simpler API at hand
+    anyways.
+3.  All that exposed low level information makes it hard for the template
+    engine and tag authors to provide proper debugging information.  The
+    nodes do not necessarily know where they are located in the file and
+    runtime errors suffer from this lack of context.
+4.  The context as a low level interface is exposed and the render method
+    as well which makes it impossible to optimize the execution or memory
+    usage.
+5.  Django guarantees a lot of things in templates that make optimizations
+    hard (for instance that the loop context is always there, even if it's
+    not needed).
+
+I would recommend providing an alternative API that moves as much
+information as possible from the runtime to the potential compile time so
+that a later possibility to introduce compilation exists.  This will also
+benefit the developer since it will result in easier tags.
+
+For instance currently a simple tag like a tag that renders the current
+time can look like this::
+
+    import datetime
+    from django import template
+
+    class CurrentTimeNode(template.Node):
+        def __init__(self, format_string):
+            self.format_string = format_string
+        def render(self, context):
+            return datetime.datetime.now().strftime(self.format_string)
+
+    def do_current_time(parser, token):
+        try:
+            # split_contents() knows not to split quoted strings.
+            tag_name, format_string = token.split_contents()
+        except ValueError:
+            raise template.TemplateSyntaxError("%r tag requires a single argument" % token.contents.split()[0])
+        if not (format_string[0] == format_string[-1] and format_string[0] in ('"', "'")):
+            raise template.TemplateSyntaxError("%r tag's argument should be in quotes" % tag_name)
+        return CurrentTimeNode(format_string[1:-1])
+
+    register = template.Library()
+    register.tag('current_time', do_current_time)
+
+This example is in fact directly taken from the docs.  A possible API that
+does not expose that many low level details and provides information to
+the compiler would for instance be something alone these lines::
+
+    import datetime
+    from django import template
+
+    def render_current_time(format_string):
+        return datetime.datetime.now().strftime(format_string)
+
+    register.tag('current_time', template.RenderResultTag(
+        grammar=['<tag_name>', 'format_string=<expression>'],
+        callback=render_current_time,
+        needs_context=False
+    ))
+
+What is different?  First of all the grammar of that tag is defined in a
+subclass of the tag.  ``<tag_name>`` matches the tag name,
+``<expression>`` matches an arbitrary expression.  When it's assigned to a
+name it means it will be passed as a keyword argument in evaluated version
+to the callback.  The result of the callback is rendered.  This of course
+is a made up and very limited API but different projects already exist
+within the Django community that can be used as inspiration for this.
+Generally though the intention would be to hide as much as possible from
+runtime information for tags that don't need it.
+
+Common tag classes I have encountered:
+
+1.  Just print something based on explicit parameters given.  Those are
+    easy because they just get some expressions or keywords and render
+    their result to the template.
+2.  Same as 1 but assign their target to a variable instead.  This would
+    also be very easy as the name of the variable is known at compile
+    time.
+3.  Same as 1 or 2 but they need the context object.  These are trickier
+    because they make it hard to compile down.  Could these be analyzed
+    further to find out why they need the context?
+4.  Tags that implement custom loops etc.  Those are tricky because they
+    would not fit into a simplified API that has the intentions to compile
+    down.  If these would want to be supported by a new API it needs
+    something like templatetk in place so that it can emit lower level
+    nodes that can be evaluated or compiled.
+
+Obviously some parts are easier to do than others.  General things you can
+do with a simplified API:
+
+-   potential better error reporting since the API can easily wrap each
+    callback and provide additional error information on failures.
+-   easier adaptation of the implementation
+-   easier to develop common tags
+-   More expressive
+-   Consistent behavior for the template designer (expressions work the
+    same for every tag etc.)
+
+There are of course downsides as well:
+
+-   Just the common tags will be simple.  Say goodbye to custom for loops.
+
+Alternatives to Compilation
+---------------------------
+
+With PyPy becoming an interesting target for Python developers it might be
+worth reconsidering the advantage of compiling templates to bytecode
+altogether.  PyPy does an amazing job at tracing and if we could locate
+small possible improvements in Django itself, PyPy might have an easier
+time speeding up templates.  It's already doing really well at
+interpreting Django templates compared to CPython.
