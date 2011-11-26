@@ -9,6 +9,10 @@
     :license: BSD, see LICENSE for more details.
 """
 from cgi import escape
+try:
+    import simplejson as json
+except ImportError:
+    import json
 
 
 class Markup(unicode):
