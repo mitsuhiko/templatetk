@@ -103,7 +103,7 @@ class JavaScriptGenerator(NodeVisitor):
     def begin_rtstate_func(self, name):
         self.writer.write_line('function %s(rtstate) {' % name)
         self.writer.indent()
-        self.writer.write_line('var w = rtstate.write;')
+        self.writer.write_line('var w = rtstate.writeFunc;')
 
     def end_rtstate_func(self):
         self.writer.outdent()
@@ -126,7 +126,7 @@ class JavaScriptGenerator(NodeVisitor):
         # resolve for them.
         for target, sourcename in fstate.iter_required_lookups():
             already_handled.add(target)
-            vars.append('%s = rtstate.lookup_var("%s")' % (
+            vars.append('%s = rtstate.lookupVar("%s")' % (
                 target,
                 sourcename
             ))
@@ -136,7 +136,8 @@ class JavaScriptGenerator(NodeVisitor):
             if local_id not in already_handled:
                 vars.append(local_id)
 
-        self.writer.write_line('var %s;' % ', '.join(vars));
+        if vars:
+            self.writer.write_line('var %s;' % ', '.join(vars));
 
     def write_assign(self, target, expr, fstate):
         assert isinstance(target, nodes.Name), 'can only assign to names'
@@ -145,10 +146,58 @@ class JavaScriptGenerator(NodeVisitor):
         self.visit(expr, fstate)
         self.writer.write(';')
         if fstate.root:
-            self.writer.write_line('rtstate.export_var("%s", %s);' % (
+            self.writer.write_line('rtstate.exportVar("%s", %s);' % (
                 target.name,
                 name
             ))
+
+    def make_target_name_tuple(self, target):
+        assert target.ctx in ('store', 'param')
+        assert isinstance(target, (nodes.Name, nodes.Tuple))
+
+        if isinstance(target, nodes.Name):
+            return [target.name]
+
+        def walk(obj):
+            rv = []
+            for node in obj.items:
+                if isinstance(node, nodes.Name):
+                    rv.append(node.name)
+                elif isinstance(node, nodes.Tuple):
+                    rv.append(walk(node))
+                else:
+                    assert 0, 'unsupported assignment to %r' % node
+            return rv
+        return walk(target)
+
+    def write_assignment(self, node, fstate):
+        rv = []
+        def walk(obj):
+            if isinstance(obj, nodes.Name):
+                rv.append(fstate.lookup_name(node.name, node.ctx))
+                return
+            for child in obj.items:
+                walk(child)
+        walk(node)
+        self.writer.write(', '.join(rv))
+
+    def write_context_as_object(self, fstate, reference_node):
+        d = dict(fstate.iter_vars(reference_node))
+        if not d:
+            self.writer.write('rtstate.context')
+            return
+        self.writer.write('rtstate.makeOverlayContext({')
+        for idx, (name, local_id) in enumerate(d.iteritems()):
+            if idx:
+                self.writer.write(', ')
+            self.writer.write('%s: %s' % (json.dumps(name), local_id))
+        self.writer.write('})')
+
+    def write_template_lookup(self, template_expression, fstate):
+        self.writer.write_line('var templateName = ')
+        self.visit(template_expression, fstate)
+        self.writer.write(';')
+        self.writer.write_line('var template = rtstate.getTemplate(templateName);')
 
     def visit_block(self, nodes, fstate):
         self.writer.write_newline()
@@ -197,7 +246,46 @@ class JavaScriptGenerator(NodeVisitor):
         self.writer.write_line('return rt.makeTemplate(root, setup, blocks);')
 
         self.writer.outdent()
-        self.writer.write_line('})')
+        self.writer.write_line('})()')
+
+    def visit_For(self, node, fstate):
+        loop_fstate = fstate.derive()
+        loop_fstate.analyze_identfiers([node.target])
+        loop_fstate.add_special_identifier(self.config.forloop_accessor)
+        loop_fstate.analyze_identfiers(node.body)
+        # XXX: else_ in a separate fstate
+
+        did_iterate = self.ident_manager.temporary()
+
+        if isinstance(node.target, nodes.Tuple):
+            if (fstate.config.allow_noniter_unpacking or
+                not fstate.config.strict_tuple_unpacking):
+                pass
+            raise NotImplementedError('Implement tuple unpacking')
+        else:
+            self.writer.write_line('rt.iterate(')
+            self.visit(node.iter, loop_fstate)
+            nt = self.make_target_name_tuple(node.target)
+            self.writer.write(', ')
+            if self.config.forloop_parent_access:
+                self.visit(nodes.Name(self.config.forloop_accessor, 'load'), fstate)
+            else:
+                self.writer.write('null')
+            self.writer.write(', %s, function(%s, ' % (
+                json.dumps(nt),
+                loop_fstate.lookup_name(self.config.forloop_accessor, 'store')
+            ))
+            self.write_assignment(node.target, loop_fstate)
+            self.writer.write(') {')
+
+        self.writer.indent()
+        buffer = self.writer.start_buffering()
+        self.visit_block(node.body, loop_fstate)
+        self.writer.end_buffering()
+        self.write_scope_code(loop_fstate)
+        self.writer.write_from_buffer(buffer)
+        self.writer.outdent()
+        self.writer.write_line('});');
 
     def visit_If(self, node, fstate):
         self.writer.write_line('if (')
@@ -235,6 +323,23 @@ class JavaScriptGenerator(NodeVisitor):
             self.visit(child, fstate)
             self.writer.write(');')
 
+    def visit_Extends(self, node, fstate):
+        self.write_template_lookup(node.template, fstate)
+        self.writer.write_line('var info = rtstate.info.makeInfo(template, '
+            'templateName, "extends");')
+        self.writer.write_line('return config.evaluateTemplate(template, ')
+        self.write_context_as_object(fstate, node)
+        self.writer.write(', rtstate.writeFunc, info);')
+
+        # XXX: if extends is on root level and not in a branch we should
+        # stop compilation here for the root function since it blows up the
+        # size of the generated code with stuff that is never executed.
+
+    def visit_Block(self, node, fstate):
+        self.writer.write_line('rtstate.evaluateBlock("%s", ' % node.name)
+        self.write_context_as_object(fstate, node)
+        self.writer.write(');')
+
     def visit_Assign(self, node, fstate):
         self.writer.write_newline()
         self.write_assign(node.target, node.node, fstate)
@@ -245,3 +350,10 @@ class JavaScriptGenerator(NodeVisitor):
 
     def visit_Const(self, node, fstate):
         self.writer.write_repr(node.value)
+
+    def visit_Getattr(self, node, fstate):
+        self.visit(node.node, fstate)
+        self.writer.write('[')
+        self.visit(node.attr, fstate)
+        self.writer.write(']')
+    visit_Getitem = visit_Getattr
