@@ -116,8 +116,13 @@
   }
   RuntimeInfo.prototype = {
     evaluateBlock : function(name, level, vars) {
-      var func = self.blockExecutors[name][level - 1];
+      var func = this.blockExecutors[name][level - 1];
       return func(this, vars);
+    },
+
+    callFilter : function(filterName, obj, args) {
+      var func = this.filters[filterName];
+      return func.apply(obj, args);
     },
 
     makeInfo : function(template, templateName, behavior) {

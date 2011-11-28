@@ -357,3 +357,106 @@ class JavaScriptGenerator(NodeVisitor):
         self.visit(node.attr, fstate)
         self.writer.write(']')
     visit_Getitem = visit_Getattr
+
+    def visit_Call(self, node, fstate):
+        # XXX: maybe later
+        raise NotImplementedError('Calling not possible with JavaScript')
+
+    def visit_TemplateData(self, node, fstate):
+        # XXX: mark as safe. just how
+        return self.visit_Const(node, fstate)
+
+    def visit_Tuple(self, node, fstate):
+        raise NotImplementedError('Tuples not possible in JavaScript')
+
+    def visit_List(self, node, fstate):
+        self.writer.write('[')
+        for idx, child in enumerate(node.items):
+            if idx:
+                self.writer.write(', ')
+            self.visit(child, fstate)
+        self.writer.write(']')
+
+    def visit_Dict(self, node, fstate):
+        self.writer.write('[')
+        for idx, pair in enumerate(node.items):
+            if idx:
+                self.writer.write(', ')
+            if not isinstance(pair.key, nodes.Const):
+                raise NotImplementedError('Constant dict key required with javascript')
+            # hack to have the same logic as json.dumps for keys
+            self.writer.write(json.dumps({pair.key.value: 0})[1:-5] + ': ')
+            self.visit(pair.value, fstate)
+        self.writer.write(']')
+
+    def visit_Filter(self, node, fstate):
+        self.writer.write('rtstate.info.callFilter(')
+        self.writer.write(', ')
+        self.writer.write(json.dumps(node.name))
+        self.visit(node.node, fstate)
+        self.writer.write(', [')
+        for idx, arg in enumerate(node.args):
+            if idx:
+                self.writer.write(', ')
+            self.visit(arg, fstate)
+        self.writer.write('])')
+
+        if node.kwargs or node.dyn_args or node.dyn_kwargs:
+            raise NotImplementedError('Dynamic calls or keyword arguments '
+                                      'not available with javascript')
+
+    def visit_CondExpr(self, node, fstate):
+        self.writer.write('(')
+        self.visit(node.test, fstate)
+        self.writer.write(' ? ')
+        self.visit(node.true, fstate)
+        self.writer.write(' : ')
+        self.visit(node.false, fstate)
+        self.writer.write(')')
+
+    def visit_Slice(self, node, fstate):
+        raise NotImplementedError('Slicing not possible with JavaScript')
+
+    def binexpr(operator):
+        def visitor(self, node, fstate):
+            self.writer.write('(')
+            self.visit(node.left, fstate)
+            self.writer.write(' %s ' % operator)
+            self.visit(node.right, fstate)
+            self.writer.write(')')
+        return visitor
+
+    visit_Add = binexpr('+')
+    visit_Sub = binexpr('-')
+    visit_Mul = binexpr('*')
+    visit_Div = binexpr('/')
+    visit_Mod = binexpr('%')
+    del binexpr
+
+    def visit_FloorDiv(self, node, fstate):
+        self.writer.write('parseInt(')
+        self.visit(node.left, fstate)
+        self.writer.write(' / ')
+        self.visit(node.right, fstate)
+        self.writer.write(')')
+
+    def visit_Pow(self, node, fstate):
+        self.writer.write('Math.pow(')
+        self.visit(node.left, fstate)
+        self.writer.write(', ')
+        self.visit(node.right, fstate)
+        self.writer.write(')')
+
+    def visit_And(self, node, fstate):
+        self.writer.write('(')
+        self.visit(node.left, fstate)
+        self.writer.write(' && ')
+        self.visit(node.right, fstate)
+        self.writer.write(')')
+
+    def visit_Or(self, node, fstate):
+        self.writer.write('(')
+        self.visit(node.left, fstate)
+        self.writer.write(' || ')
+        self.visit(node.right, fstate)
+        self.writer.write(')')
