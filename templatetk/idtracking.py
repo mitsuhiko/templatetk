@@ -21,7 +21,7 @@ class IdentTracker(NodeVisitor):
     def visit_Name(self, node):
         from_outer_scope = False
         reused_local_id = False
-        local_id = self.frame.ident_manager.encode(node.name)
+        local_id = None
 
         for idmap in self.frame.ident_manager.iter_identifier_maps(self.frame):
             if node.name not in idmap:
@@ -35,6 +35,9 @@ class IdentTracker(NodeVisitor):
                     local_id = self.frame.ident_manager.override(node.name)
                     self.frame.required_aliases[local_id] = old
             break
+
+        if local_id is None:
+            local_id = self.frame.ident_manager.encode(node.name)
 
         if node.ctx != 'load' or not reused_local_id:
             self.frame.local_identifiers[node.name] = local_id
@@ -75,8 +78,9 @@ class IdentTracker(NodeVisitor):
 
 class IdentManager(object):
 
-    def __init__(self):
+    def __init__(self, short_ids=False):
         self.index = 1
+        self.short_ids = short_ids
 
     def next_num(self):
         num = self.index
@@ -87,9 +91,13 @@ class IdentManager(object):
         return self.encode(name, self.next_num())
 
     def encode(self, name, suffix=0):
+        if self.short_ids:
+            return 'l%d' % self.next_num()
         return 'l_%s_%d' % (name, suffix)
 
     def decode(self, name):
+        if self.short_ids:
+            raise RuntimeError('Cannot decode with short ids')
         if name[:2] != 'l_':
             return False
         return name[2:].rsplit('_', 1)[0]
@@ -103,4 +111,4 @@ class IdentManager(object):
             ptr = ptr.parent
 
     def temporary(self):
-        return 't_%d' % self.next_num()
+        return 't%d' % self.next_num()

@@ -94,11 +94,11 @@ def to_javascript(node, stream=None):
 
 class JavaScriptGenerator(NodeVisitor):
 
-    def __init__(self, stream, config):
+    def __init__(self, stream, config, short_ids=True):
         NodeVisitor.__init__(self)
         self.config = config
         self.writer = JavaScriptWriter(stream)
-        self.ident_manager = IdentManager()
+        self.ident_manager = IdentManager(short_ids=short_ids)
 
     def begin_rtstate_func(self, name):
         self.writer.write_line('function %s(rtstate) {' % name)
