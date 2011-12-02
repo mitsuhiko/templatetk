@@ -242,6 +242,7 @@ class JavaScriptGenerator(NodeVisitor):
 
         for block_node in node.find_all(nodes.Block):
             block_fstate = fstate.derive(scope='hard')
+            block_fstate.analyze_identfiers(block_node.body)
             self.begin_rtstate_func('block_' + block_node.name)
             buffer = self.writer.start_buffering()
             self.visit_block(block_node.body, block_fstate)
@@ -378,7 +379,7 @@ class JavaScriptGenerator(NodeVisitor):
 
     def visit_TemplateData(self, node, fstate):
         # XXX: mark as safe. just how
-        return self.visit_Const(node, fstate)
+        self.writer.write_repr(node.data)
 
     def visit_Tuple(self, node, fstate):
         raise NotImplementedError('Tuples not possible in JavaScript')

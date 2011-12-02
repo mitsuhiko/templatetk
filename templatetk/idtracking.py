@@ -18,6 +18,11 @@ class IdentTracker(NodeVisitor):
         NodeVisitor.__init__(self)
         self.frame = frame
 
+    def visit_Block(self, node):
+        # do not enter blocks.  It would not harm but cause some
+        # totally unnecessary lookups.
+        pass
+
     def visit_Name(self, node):
         from_outer_scope = False
         reused_local_id = False
