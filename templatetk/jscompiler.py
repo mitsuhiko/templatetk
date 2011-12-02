@@ -21,10 +21,15 @@ from .fstate import FrameState
 from .utils import json
 
 
+class StopFrameCompilation(Exception):
+    pass
+
+
 class JavaScriptWriter(object):
 
-    def __init__(self, stream):
+    def __init__(self, stream, indentation=2):
         self.stream_stack = [stream]
+        self.indentation = indentation
 
         self._new_lines = 0
         self._first_write = True
@@ -40,10 +45,11 @@ class JavaScriptWriter(object):
         """Write a string into the output stream."""
         stream = self.stream_stack[-1]
         if self._new_lines:
-            if not self._first_write:
-                stream.write('\n' * self._new_lines)
-            self._first_write = False
-            stream.write('  ' * self._indentation)
+            if self.indentation >= 0:
+                if not self._first_write:
+                    stream.write('\n' * self._new_lines)
+                self._first_write = False
+                stream.write(' ' * (self.indentation * self._indentation))
             self._new_lines = 0
         if isinstance(x, unicode):
             x = x.encode('utf-8')
@@ -59,8 +65,14 @@ class JavaScriptWriter(object):
         self.write_newline(node, extra)
         self.write(x)
 
+    def dump_object(self, obj):
+        separators = None
+        if self.indentation < 0:
+            separators = (',', ':')
+        return json.dumps(obj, separators=separators)
+
     def write_repr(self, obj):
-        return self.write(json.dumps(obj))
+        return self.write(self.dump_object(obj))
 
     def write_from_buffer(self, buffer):
         buffer.seek(0)
@@ -94,16 +106,16 @@ def to_javascript(node, stream=None):
 
 class JavaScriptGenerator(NodeVisitor):
 
-    def __init__(self, stream, config, short_ids=True):
+    def __init__(self, stream, config, short_ids=False, indentation=2):
         NodeVisitor.__init__(self)
         self.config = config
-        self.writer = JavaScriptWriter(stream)
+        self.writer = JavaScriptWriter(stream, indentation)
         self.ident_manager = IdentManager(short_ids=short_ids)
 
     def begin_rtstate_func(self, name):
-        self.writer.write_line('function %s(rtstate) {' % name)
+        self.writer.write_line('function %s(rts) {' % name)
         self.writer.indent()
-        self.writer.write_line('var w = rtstate.writeFunc;')
+        self.writer.write_line('var w = rts.writeFunc;')
 
     def end_rtstate_func(self):
         self.writer.outdent()
@@ -126,7 +138,7 @@ class JavaScriptGenerator(NodeVisitor):
         # resolve for them.
         for target, sourcename in fstate.iter_required_lookups():
             already_handled.add(target)
-            vars.append('%s = rtstate.lookupVar("%s")' % (
+            vars.append('%s = rts.lookupVar("%s")' % (
                 target,
                 sourcename
             ))
@@ -146,7 +158,7 @@ class JavaScriptGenerator(NodeVisitor):
         self.visit(expr, fstate)
         self.writer.write(';')
         if fstate.root:
-            self.writer.write_line('rtstate.exportVar("%s", %s);' % (
+            self.writer.write_line('rts.exportVar("%s", %s);' % (
                 target.name,
                 name
             ))
@@ -184,25 +196,28 @@ class JavaScriptGenerator(NodeVisitor):
     def write_context_as_object(self, fstate, reference_node):
         d = dict(fstate.iter_vars(reference_node))
         if not d:
-            self.writer.write('rtstate.context')
+            self.writer.write('rts.context')
             return
-        self.writer.write('rtstate.makeOverlayContext({')
+        self.writer.write('rts.makeOverlayContext({')
         for idx, (name, local_id) in enumerate(d.iteritems()):
             if idx:
                 self.writer.write(', ')
-            self.writer.write('%s: %s' % (json.dumps(name), local_id))
+            self.writer.write('%s: %s' % (self.writer.dump_object(name), local_id))
         self.writer.write('})')
 
     def write_template_lookup(self, template_expression, fstate):
         self.writer.write_line('var templateName = ')
         self.visit(template_expression, fstate)
         self.writer.write(';')
-        self.writer.write_line('var template = rtstate.getTemplate(templateName);')
+        self.writer.write_line('var template = rts.getTemplate(templateName);')
 
     def visit_block(self, nodes, fstate):
         self.writer.write_newline()
-        for node in nodes:
-            self.visit(node, fstate)
+        try:
+            for node in nodes:
+                self.visit(node, fstate)
+        except StopFrameCompilation:
+            pass
 
     def visit_Template(self, node, fstate):
         assert fstate is None, 'framestate passed to template visitor'
@@ -222,7 +237,7 @@ class JavaScriptGenerator(NodeVisitor):
         self.end_rtstate_func()
 
         self.begin_rtstate_func('setup')
-        self.writer.write_line('rt.registerBlockMapping(rtstate.info, blocks);')
+        self.writer.write_line('rt.registerBlockMapping(rts.info, blocks);')
         self.end_rtstate_func()
 
         for block_node in node.find_all(nodes.Block):
@@ -272,7 +287,7 @@ class JavaScriptGenerator(NodeVisitor):
             else:
                 self.writer.write('null')
             self.writer.write(', %s, function(%s, ' % (
-                json.dumps(nt),
+                self.writer.dump_object(nt),
                 loop_fstate.lookup_name(self.config.forloop_accessor, 'store')
             ))
             self.write_assignment(node.target, loop_fstate)
@@ -325,18 +340,17 @@ class JavaScriptGenerator(NodeVisitor):
 
     def visit_Extends(self, node, fstate):
         self.write_template_lookup(node.template, fstate)
-        self.writer.write_line('var info = rtstate.info.makeInfo(template, '
+        self.writer.write_line('var info = rts.info.makeInfo(template, '
             'templateName, "extends");')
-        self.writer.write_line('return config.evaluateTemplate(template, ')
+        self.writer.write_line('return rt.config.evaluateTemplate(template, ')
         self.write_context_as_object(fstate, node)
-        self.writer.write(', rtstate.writeFunc, info);')
+        self.writer.write(', rts.writeFunc, info);')
 
-        # XXX: if extends is on root level and not in a branch we should
-        # stop compilation here for the root function since it blows up the
-        # size of the generated code with stuff that is never executed.
+        if fstate.root:
+            raise StopFrameCompilation()
 
     def visit_Block(self, node, fstate):
-        self.writer.write_line('rtstate.evaluateBlock("%s", ' % node.name)
+        self.writer.write_line('rts.evaluateBlock("%s", ' % node.name)
         self.write_context_as_object(fstate, node)
         self.writer.write(');')
 
@@ -390,9 +404,9 @@ class JavaScriptGenerator(NodeVisitor):
         self.writer.write(']')
 
     def visit_Filter(self, node, fstate):
-        self.writer.write('rtstate.info.callFilter(')
+        self.writer.write('rts.info.callFilter(')
         self.writer.write(', ')
-        self.writer.write(json.dumps(node.name))
+        self.writer.write_repr(node.name)
         self.visit(node.node, fstate)
         self.writer.write(', [')
         for idx, arg in enumerate(node.args):
@@ -425,6 +439,13 @@ class JavaScriptGenerator(NodeVisitor):
             self.visit(node.right, fstate)
             self.writer.write(')')
         return visitor
+
+    def visit_Concat(self, node, fstate):
+        self.writer.write('(""')
+        for child in node.nodes:
+            self.writer.write(' + ')
+            self.visit(child, fstate)
+        self.writer.write(')')
 
     visit_Add = binexpr('+')
     visit_Sub = binexpr('-')
