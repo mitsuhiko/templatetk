@@ -205,12 +205,6 @@ class JavaScriptGenerator(NodeVisitor):
             self.writer.write('%s: %s' % (self.writer.dump_object(name), local_id))
         self.writer.write('})')
 
-    def write_template_lookup(self, template_expression, fstate):
-        self.writer.write_line('var templateName = ')
-        self.visit(template_expression, fstate)
-        self.writer.write(';')
-        self.writer.write_line('var template = rts.getTemplate(templateName);')
-
     def visit_block(self, nodes, fstate):
         self.writer.write_newline()
         try:
@@ -340,12 +334,11 @@ class JavaScriptGenerator(NodeVisitor):
             self.writer.write(');')
 
     def visit_Extends(self, node, fstate):
-        self.write_template_lookup(node.template, fstate)
-        self.writer.write_line('var info = rts.info.makeInfo(template, '
-            'templateName, "extends");')
-        self.writer.write_line('return rt.config.evaluateTemplate(template, ')
+        self.writer.write_line('return rts.extends(')
+        self.visit(node.template, fstate)
+        self.writer.write(', ')
         self.write_context_as_object(fstate, node)
-        self.writer.write(', rts.writeFunc, info);')
+        self.writer.write(');')
 
         if fstate.root:
             raise StopFrameCompilation()

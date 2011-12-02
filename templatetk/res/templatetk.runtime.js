@@ -102,6 +102,12 @@
       var rv = this.config.getTemplate(templateName);
       this.templateCache[templateName] = rv;
       return rv;
+    },
+
+    extends : function(name, context) {
+      var template = this.getTemplate(name);
+      var info = this.info.makeInfo(template, name, "extends");
+      return lib.config.evaluateTemplate(template, context, this.writeFunc, info);
     }
   };
 
