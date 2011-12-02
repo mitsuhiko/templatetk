@@ -605,7 +605,7 @@ class IncludeTestCase(object):
 
         index_template = n.Template([
             n.Output([n.Const('1\n')]),
-            n.Include(n.Const('include.html'), True, False),
+            n.Include(n.Const('include.html'), False),
             n.Output([n.Const('\n2')])
         ])
         include_template = n.Template([
@@ -625,7 +625,7 @@ class IncludeTestCase(object):
 
         index_template = n.Template([
             n.Output([n.Const('1\n')]),
-            n.Include(n.Const('includemissing.html'), True, True),
+            n.Include(n.Const('includemissing.html'), True),
             n.Output([n.Const('\n2')])
         ])
         include_template = n.Template([
@@ -646,7 +646,7 @@ class ImportTestCase(object):
         n = nodes
 
         index_template = n.Template([
-            n.Import(n.Const('import.html'), n.Name('foo', 'store'), True),
+            n.Import(n.Const('import.html'), n.Name('foo', 'store')),
             n.Output([n.Getattr(n.Name('foo', 'load'), n.Const('bar'))])
         ])
         import_template = n.Template([
@@ -667,7 +667,7 @@ class ImportTestCase(object):
         index_template = n.Template([
             n.FromImport(n.Const('import.html'), [
                 n.FromImportItem(n.Name('foo', 'store'), n.Const('foo')),
-                n.FromImportItem(n.Name('x', 'store'), n.Const('bar'))], True),
+                n.FromImportItem(n.Name('x', 'store'), n.Const('bar'))]),
             n.Output([n.Name('foo', 'load'), n.Const('|'), n.Name('x', 'load')])
         ])
         import_template = n.Template([

@@ -625,6 +625,10 @@ class ASTTransformer(NodeVisitor):
             return ast.BinOp(a, operator(), b, lineno=node.lineno)
         return visitor
 
+    def visist_Concat(self, node, fstate):
+        arg = ast.List([self.visit(x, fstate) for x in node.nodes])
+        return self.make_call('config.concat', [arg], lineno=node.lineno)
+
     visit_Add = binexpr(ast.Add)
     visit_Sub = binexpr(ast.Sub)
     visit_Mul = binexpr(ast.Mult)

@@ -10,6 +10,7 @@
     :license: BSD, see LICENSE for more details.
 """
 from types import MethodType, FunctionType
+from itertools import imap
 
 from .runtime import LoopContext, Function
 from .utils import Markup
@@ -55,6 +56,10 @@ class Config(object):
                 return obj[attribute.start:attribute.stop]
             return obj[attribute]
         return self.getattr(obj, attribute)
+
+    def concat(self, iterable):
+        # TODO: test and markup safety
+        return u''.join(imap(unicode, iterable))
 
     def to_unicode(self, obj):
         return unicode(obj)

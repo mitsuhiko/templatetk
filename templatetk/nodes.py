@@ -267,19 +267,19 @@ class Block(Stmt):
 
 class Include(Stmt):
     """A node that represents the include tag."""
-    fields = ('template', 'with_context', 'ignore_missing')
+    fields = ('template', 'ignore_missing')
 
 
 class Import(Stmt):
     """A node that represents the import tag."""
-    fields = ('template', 'target', 'with_context')
+    fields = ('template', 'target')
 
 
 class FromImport(Stmt):
     """A node that represents the from import tag.  The items have to be
     FromImportItems.
     """
-    fields = ('template', 'items', 'with_context')
+    fields = ('template', 'items')
 
 
 class FromImportItem(Helper):
