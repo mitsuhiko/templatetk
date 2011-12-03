@@ -225,16 +225,7 @@ class ForLoopTestCase(object):
         ), '1:0;2:1;3:2;4:3;', config=MyConfig())
 
     def test_loop_with_parent_access(self):
-        from ..runtime import LoopContextBase
-        class CustomLoopContext(LoopContextBase):
-            def __init__(self, iterator, parent):
-                LoopContextBase.__init__(self, iterator)
-                self.parent = parent
-        class MyConfig(Config):
-            def wrap_loop(self, iterator, parent=None):
-                return CustomLoopContext(iterator, parent)
-        config = MyConfig()
-        config.forloop_parent_access = True
+        config = Config()
 
         n = nodes
         template = n.Template([

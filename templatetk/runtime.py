@@ -148,7 +148,7 @@ class LoopContextBase(object):
     required by the system.
     """
 
-    def __init__(self, iterable):
+    def __init__(self, iterable, parent=None):
         self._iterator = iter(iterable)
         self.index0 = -1
 
@@ -181,6 +181,10 @@ class LoopContext(LoopContextBase):
     """A loop context for dynamic iteration.  This does not have to be used
     but it's a good base implementation.
     """
+
+    def __init__(self, iterable, parent=None):
+        LoopContextBase.__init__(self, iterable, parent)
+        self.parent = parent
 
     def cycle(self, *args):
         """Cycles among the arguments with the current loop index."""

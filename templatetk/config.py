@@ -31,7 +31,7 @@ class Config(object):
         self.intercepted_binops = frozenset()
         self.intercepted_unops = frozenset()
         self.forloop_accessor = 'loop'
-        self.forloop_parent_access = False
+        self.forloop_parent_access = True
         self.strict_tuple_unpacking = False
         self.allow_noniter_unpacking = False
         self.markup_type = Markup
@@ -82,7 +82,7 @@ class Config(object):
         return {}
 
     def wrap_loop(self, iterator, parent=None):
-        return LoopContext(iterator)
+        return LoopContext(iterator, parent)
 
     def join_path(self, parent, template_name):
         return template_name
