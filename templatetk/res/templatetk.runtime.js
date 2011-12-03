@@ -204,7 +204,7 @@
     finalize : function(value) {
       if (this.autoescape)
         value = rtlib.escape(value);
-      return '' + value;
+      return rtlib.finalize('' + value);
     },
 
     registerBlock : function(name, executor) {
@@ -280,6 +280,10 @@
           Object.prototype.toString.call(value.toHTML) === '[object Function]')
         return value.toHTML();
       return escapeString(value);
+    },
+
+    finalize : function(value) {
+      return value;
     },
 
     iterate : function(iterable, parent, unpackInfo, func) {
