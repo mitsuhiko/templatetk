@@ -210,7 +210,7 @@
     registerBlock : function(name, executor) {
       var m = this.blockExecutors;
       (m[name] = (m[name] || [])).push(executor);
-    },
+    }
   };
 
   var rtlib = {
