@@ -91,14 +91,14 @@ class JavaScriptWriter(object):
         self.stream_stack.pop()
 
 
-def to_javascript(node, stream=None):
+def to_javascript(node, stream=None, short_ids=False, indentation=2):
     """Converts a template to JavaScript."""
     if stream is None:
         stream = StringIO()
         as_string = True
     else:
         as_string = False
-    gen = JavaScriptGenerator(stream, node.config)
+    gen = JavaScriptGenerator(stream, node.config, short_ids, indentation)
     gen.visit(node, None)
     if as_string:
         return stream.getvalue()
@@ -112,10 +112,11 @@ class JavaScriptGenerator(NodeVisitor):
         self.writer = JavaScriptWriter(stream, indentation)
         self.ident_manager = IdentManager(short_ids=short_ids)
 
-    def begin_rtstate_func(self, name):
+    def begin_rtstate_func(self, name, with_writer=True):
         self.writer.write_line('function %s(rts) {' % name)
         self.writer.indent()
-        self.writer.write_line('var w = rts.writeFunc;')
+        if with_writer:
+            self.writer.write_line('var w = rts.writeFunc;')
 
     def end_rtstate_func(self):
         self.writer.outdent()
@@ -230,7 +231,7 @@ class JavaScriptGenerator(NodeVisitor):
         self.writer.write_from_buffer(buffer)
         self.end_rtstate_func()
 
-        self.begin_rtstate_func('setup')
+        self.begin_rtstate_func('setup', with_writer=False)
         self.writer.write_line('rt.registerBlockMapping(rts.info, blocks);')
         self.end_rtstate_func()
 
@@ -256,7 +257,7 @@ class JavaScriptGenerator(NodeVisitor):
         self.writer.write_line('return rt.makeTemplate(root, setup, blocks);')
 
         self.writer.outdent()
-        self.writer.write_line('})()')
+        self.writer.write_line('})')
 
     def visit_For(self, node, fstate):
         loop_fstate = fstate.derive()
@@ -334,7 +335,7 @@ class JavaScriptGenerator(NodeVisitor):
             self.writer.write(');')
 
     def visit_Extends(self, node, fstate):
-        self.writer.write_line('return rts.extends(')
+        self.writer.write_line('return rts.extendTemplate(')
         self.visit(node.template, fstate)
         self.writer.write(', ')
         self.write_context_as_object(fstate, node)

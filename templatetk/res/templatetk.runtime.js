@@ -10,14 +10,21 @@
     getAutoEscapeDefault : function(templateName) {
       return true;
     },
+
     getFilters : function() {
       return this.filters;
     },
+
     evaluateTemplate : function(template, context, writeFunc, info) {
       template.run(template.makeRuntimeState(context, writeFunc, info));
     },
+
     getTemplate : function(name) {
       throw new Exception('Template loading not implemented');
+    },
+
+    joinPath : function(name, parent) {
+      return name;
     }
   };
 
@@ -44,6 +51,7 @@
   };
   Template.prototype = {
     render : function(context) {
+      context = new Context(context);
       var buffer = [];
       var rtstate = this.makeRuntimeState(context, function(chunk) {
         buffer.push(chunk);
@@ -57,8 +65,8 @@
     },
 
     run : function(rtstate) {
-      self.setupFunc(rtstate);
-      self.rootFunc(rtstate);
+      this.setupFunc(rtstate);
+      this.rootFunc(rtstate);
     }
   };
 
@@ -79,15 +87,10 @@
       return new Context(locals, this.context);
     },
 
-    registerBlock : function(name, executor) {
-      var m = this.info.blockExecutors;
-      (m[name] = (m[name] || [])).push(executor);
-    },
-
     evaluateBlock : function(name, context, level) {
       if (typeof level === 'undefined')
         level = -1;
-      return self.info.evaluateBlock(name, level, vars)
+      return this.info.evaluateBlock(name, level, context, this.writeFunc);
     },
 
     exportVar : function(name, value) {
@@ -95,19 +98,19 @@
     },
 
     getTemplate : function(name) {
-      var templateName = this.config.joinPath(this.templateName, name);
-      var tmpl = this.templateCache[templateName];
-      if (tmpl !== null)
+      var templateName = this.config.joinPath(name, this.templateName);
+      var tmpl = this.info.templateCache[templateName];
+      if (tmpl != null)
         return tmpl;
       var rv = this.config.getTemplate(templateName);
-      this.templateCache[templateName] = rv;
+      this.info.templateCache[templateName] = rv;
       return rv;
     },
 
-    extends : function(name, context) {
+    extendTemplate : function(name, context) {
       var template = this.getTemplate(name);
       var info = this.info.makeInfo(template, name, "extends");
-      return lib.config.evaluateTemplate(template, context, this.writeFunc, info);
+      return this.config.evaluateTemplate(template, context, this.writeFunc, info);
     }
   };
 
@@ -121,9 +124,10 @@
     this.exports = {};
   }
   RuntimeInfo.prototype = {
-    evaluateBlock : function(name, level, vars) {
-      var func = this.blockExecutors[name][level - 1];
-      return func(this, vars);
+    evaluateBlock : function(name, level, vars, writeFunc) {
+      var executors = this.blockExecutors[name];
+      var func = executors[executors.length + level - 1];
+      return func(this, vars, writeFunc);
     },
 
     callFilter : function(filterName, obj, args) {
@@ -138,7 +142,12 @@
         for (var key in this.blockExecutors)
           rv.blockExecutors[key] = this.blockExecutors[key];
       return rv;
-    }
+    },
+
+    registerBlock : function(name, executor) {
+      var m = this.blockExecutors;
+      (m[name] = (m[name] || [])).push(executor);
+    },
   };
 
   var rtlib = {
@@ -155,8 +164,8 @@
     registerBlockMapping : function(info, blocks) {
       for (var name in blocks)
         info.registerBlock(name, (function(renderFunc) {
-          return function(info, vars) {
-            return renderFunc(rtlib.RuntimeState(vars, info.config,
+          return function(info, vars, writeFunc) {
+            return renderFunc(new rtlib.RuntimeState(vars, writeFunc, info.config,
               info.templateName));
           };
         })(blocks[name]));
@@ -175,10 +184,10 @@
       return rv;
     },
 
-    unpackTuple : function(obj, unpackInfo) {
+    unpackTuple : function(obj, unpackInfo, loopContext) {
       if (typeof obj.length !== 'undefined')
         return [obj];
-      var rv = [];
+      var rv = [loopContext];
       function unpack(obj, info) {
         for (var i = 0, n = info.length; i < n; i++)
           if (typeof info[i] == 'array')
@@ -204,15 +213,13 @@
       var simple = unpackInfo.length == 1 && typeof unpackInfo[0] === 'string';
       for (var i = 0; i < n; i++) {
         ctx.last = i + 1 == n;
-        ctx.index0++;
-        ctx.index++;
-        ctx.revindex--;
-        ctx.revindex0--;
         if (simple)
-          func(rtlib.makeUndefined(seq[i], unpackInfo[0]));
+          func(ctx, rtlib.makeUndefined(seq[i], unpackInfo[0]));
         else
-          func.apply(null, rtlib.unpackTuple(seq[i], unpackInfo));
+          func.apply(null, rtlib.unpackTuple(seq[i], unpackInfo, ctx));
         ctx.first = false;
+        ctx.index0++, ctx.index++;
+        ctx.revindex--, ctx.revindex0--;
       }
     }
   };
@@ -220,6 +227,7 @@
 
   var lib = global.templatetk = {
     defaultConfig : null,
+    Config : Config,
     rt : rtlib,
     noConflict : function() {
       global.templatetk = _templatetk;
