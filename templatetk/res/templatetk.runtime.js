@@ -51,13 +51,38 @@
   };
   Template.prototype = {
     render : function(context) {
-      context = new Context(context || {});
+      context = new Context(context || {}, new Context(rtlib.getGlobals()));
       var buffer = [];
       var rtstate = this.makeRuntimeState(context, function(chunk) {
         buffer.push(chunk);
       });
       this.run(rtstate);
       return buffer.join("");
+    },
+
+    renderToElements : function(context, selector) {
+      var container = document.createElement('div');
+      container.innerHTML = this.render(context);
+      if (selector != null)
+        return jQuery(selector, container)[0].childNodes;
+      return container.childNodes;
+    },
+
+    renderInto : function(context, targetSelector, selector) {
+      var elements = this.renderToElements(context, selector);
+      jQuery(targetSelector).empty().append(elements);
+    },
+
+    replaceRender : function(context, selectors) {
+      if (typeof selectors === 'string')
+        this._replaceRender(context, selectors);
+      for (var i = 0, n = selectors.length; i < n; i++)
+        this._replaceRender(context, selectors[i]);
+    },
+
+    _replaceRender : function(context, selector) {
+      var elements = this.renderToElements(context, selector);
+      jQuery(selector).empty().append(elements);
     },
 
     makeRuntimeState : function(context, writeFunc, info) {
@@ -70,6 +95,8 @@
     },
 
     toString : function() {
+      if (this.name == null)
+        return '[Template]';
       return '[Template "' + this.name + '"]';
     }
   };
@@ -169,6 +196,10 @@
       return lib.defaultConfig;
     },
 
+    getGlobals : function() {
+      return lib.globals;
+    },
+
     registerBlockMapping : function(info, blocks) {
       for (var name in blocks)
         info.registerBlock(name, (function(renderFunc) {
@@ -239,6 +270,7 @@
 
   var lib = global.templatetk = {
     defaultConfig : null,
+    globals : {},
     Config : Config,
     rt : rtlib,
     noConflict : function() {
