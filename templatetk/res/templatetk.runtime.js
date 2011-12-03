@@ -3,6 +3,32 @@
   var _templatetk = global.templatetk;
   var undefinedSingleton = [][0];
 
+  /* an aweful method to exploit the browser's support for escaping HTML */
+  var _escapeMapping = {
+    '&':    '&amp;',
+    '>':    '&gt;',
+    '<':    '&lt;',
+    "'":    '&#39;',
+    '"':    '&#34;'
+  };
+  function escapeString(value) {
+    return ('' + value).replace(/(["'&<>])/g, function(match) {
+      return _escapeMapping[match[0]];
+    });
+  }
+
+  function Markup(value) {
+    this.value = value;
+  }
+  Markup.prototype = {
+    toString : function() {
+      return this.value;
+    },
+    toHTML : function() {
+      return this;
+    }
+  };
+
   function Config() {
     this.filters = {};
   };
@@ -175,6 +201,12 @@
       return rv;
     },
 
+    finalize : function(value) {
+      if (this.autoescape)
+        value = rtlib.escape(value);
+      return '' + value;
+    },
+
     registerBlock : function(name, executor) {
       var m = this.blockExecutors;
       (m[name] = (m[name] || [])).push(executor);
@@ -182,6 +214,7 @@
   };
 
   var rtlib = {
+    Markup : Markup,
     Template : Template,
     RuntimeState : RuntimeState,
     RuntimeInfo : RuntimeInfo,
@@ -193,7 +226,7 @@
     },
 
     getConfig : function() {
-      return lib.defaultConfig;
+      return lib.config;
     },
 
     getGlobals : function() {
@@ -238,6 +271,17 @@
       return rv;
     },
 
+    markSafe : function(value) {
+      return new Markup('' + value);
+    },
+
+    escape : function(value) {
+      if (typeof value.toHTML !== 'undefined' &&
+          Object.prototype.toString.call(value.toHTML) === '[object Function]')
+        return value.toHTML();
+      return escapeString(value);
+    },
+
     iterate : function(iterable, parent, unpackInfo, func) {
       var index = 0;
       var seq = rtlib.sequenceFromIterable(iterable);
@@ -269,7 +313,7 @@
 
 
   var lib = global.templatetk = {
-    defaultConfig : null,
+    config : new Config(),
     globals : {},
     Config : Config,
     rt : rtlib,

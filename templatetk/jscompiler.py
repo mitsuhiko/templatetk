@@ -333,7 +333,12 @@ class JavaScriptGenerator(NodeVisitor):
     def visit_Output(self, node, fstate):
         for child in node.nodes:
             self.writer.write_line('w(')
-            self.visit(child, fstate)
+            if isinstance(child, nodes.TemplateData):
+                self.writer.write_repr(child.data)
+            else:
+                self.writer.write('rts.info.finalize(')
+                self.visit(child, fstate)
+                self.writer.write(')')
             self.writer.write(');')
 
     def visit_Extends(self, node, fstate):
@@ -386,8 +391,9 @@ class JavaScriptGenerator(NodeVisitor):
                                       'not available with javascript')
 
     def visit_TemplateData(self, node, fstate):
-        # XXX: mark as safe. just how
+        self.writer.write('rt.markSafe(')
         self.writer.write_repr(node.data)
+        self.writer.write(')')
 
     def visit_Tuple(self, node, fstate):
         raise NotImplementedError('Tuples not possible in JavaScript')
