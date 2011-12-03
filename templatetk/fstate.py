@@ -73,6 +73,9 @@ class FrameState(object):
     def add_special_identifier(self, name):
         self.analyze_identfiers([nodes.Name(name, 'param')])
 
+    def add_implicit_lookup(self, name):
+        self.analyze_identfiers([nodes.Name(name, 'load')])
+
     def iter_vars(self, reference_node=None):
         found = set()
         for idmap in self.ident_manager.iter_identifier_maps(self):

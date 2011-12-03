@@ -3,7 +3,7 @@
   var _templatetk = global.templatetk;
   var undefinedSingleton = [][0];
 
-  var Config = function() {
+  function Config() {
     this.filters = {};
   };
   Config.prototype = {
@@ -12,6 +12,7 @@
     },
 
     getFilters : function() {
+      // TODO: make a copy here
       return this.filters;
     },
 
@@ -28,7 +29,7 @@
     }
   };
 
-  var Context = function(vars, parent) {
+  function Context(vars, parent) {
     this.vars = vars;
     this.parent = parent;
   };
@@ -41,17 +42,16 @@
     }
   };
 
-  var Template = function(rootFunc, setupFunc, blocks, config) {
+  function Template(rootFunc, setupFunc, blocks, config) {
     this.rootFunc = rootFunc;
     this.setupFunc = setupFunc;
     this.blocks = blocks;
-    if (config == null)
-      config = lib.defaultConfig;
     this.config = config;
+    this.name = '<string>';
   };
   Template.prototype = {
     render : function(context) {
-      context = new Context(context);
+      context = new Context(context || {});
       var buffer = [];
       var rtstate = this.makeRuntimeState(context, function(chunk) {
         buffer.push(chunk);
@@ -67,6 +67,10 @@
     run : function(rtstate) {
       this.setupFunc(rtstate);
       this.rootFunc(rtstate);
+    },
+
+    toString : function() {
+      return '[Template "' + this.name + '"]';
     }
   };
 
@@ -126,7 +130,7 @@
   RuntimeInfo.prototype = {
     evaluateBlock : function(name, level, vars, writeFunc) {
       var executors = this.blockExecutors[name];
-      var func = executors[executors.length + level - 1];
+      var func = executors[~level];
       return func(this, vars, writeFunc);
     },
 
@@ -161,6 +165,10 @@
       return value;
     },
 
+    getConfig : function() {
+      return lib.defaultConfig;
+    },
+
     registerBlockMapping : function(info, blocks) {
       for (var name in blocks)
         info.registerBlock(name, (function(renderFunc) {
@@ -172,7 +180,7 @@
     },
 
     makeTemplate : function(rootFunc, setupFunc, blocks) {
-      return new rtlib.Template(rootFunc, setupFunc, blocks);
+      return new this.Template(rootFunc, setupFunc, blocks, this.getConfig());
     },
 
     sequenceFromIterable : function(iterable) {
@@ -204,11 +212,15 @@
       var seq = rtlib.sequenceFromIterable(iterable);
       var n = seq.length;
       var ctx = {
+        parent:     parent,
         first:      true,
         index0:     0,
         index:      1,
         revindex:   n,
-        revindex0:  n - 1
+        revindex0:  n - 1,
+        cycle:      function() {
+          return arguments[ctx.index0 % arguments.length];
+        }
       };
       var simple = unpackInfo.length == 1 && typeof unpackInfo[0] === 'string';
       for (var i = 0; i < n; i++) {

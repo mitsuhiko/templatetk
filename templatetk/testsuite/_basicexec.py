@@ -224,6 +224,30 @@ class ForLoopTestCase(object):
             iterable=[1, 2, 3, 4]
         ), '1:0;2:1;3:2;4:3;', config=MyConfig())
 
+    def test_loop_with_parent_access(self):
+        from ..runtime import LoopContextBase
+        class CustomLoopContext(LoopContextBase):
+            def __init__(self, iterator, parent):
+                LoopContextBase.__init__(self, iterator)
+                self.parent = parent
+        class MyConfig(Config):
+            def wrap_loop(self, iterator, parent=None):
+                return CustomLoopContext(iterator, parent)
+        config = MyConfig()
+        config.forloop_parent_access = True
+
+        n = nodes
+        template = n.Template([
+            n.For(n.Name('item', 'store'), n.Name('iterable', 'load'), [
+                n.Output([n.Getattr(n.Name('loop', 'load'), n.Const('parent'))])
+            ], None)
+        ])
+
+        self.assert_result_matches(template, dict(
+            loop=42,
+            iterable=[1]
+        ), '42', config=config)
+
     def test_silent_loop_unpacking(self):
         config = Config()
         config.allow_noniter_unpacking = True

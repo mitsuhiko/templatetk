@@ -263,6 +263,8 @@ class JavaScriptGenerator(NodeVisitor):
         loop_fstate = fstate.derive()
         loop_fstate.analyze_identfiers([node.target])
         loop_fstate.add_special_identifier(self.config.forloop_accessor)
+        if self.config.forloop_parent_access:
+            fstate.add_implicit_lookup(self.config.forloop_accessor)
         loop_fstate.analyze_identfiers(node.body)
         # XXX: else_ in a separate fstate
 
@@ -368,8 +370,20 @@ class JavaScriptGenerator(NodeVisitor):
     visit_Getitem = visit_Getattr
 
     def visit_Call(self, node, fstate):
-        # XXX: maybe later
-        raise NotImplementedError('Calling not possible with JavaScript')
+        # XXX: For intercepting this it would be necessary to extract the
+        # rightmost part of the dotted expression in node.node so that the
+        # owner can be preserved for JavaScript (this)
+        self.visit(node.node, fstate)
+        self.writer.write('(')
+        for idx, arg in enumerate(node.args):
+            if idx:
+                self.writer.write(', ')
+            self.visit(arg, fstate)
+        self.writer.write(')')
+
+        if node.kwargs or node.dyn_args or node.dyn_kwargs:
+            raise NotImplementedError('Dynamic calls or keyword arguments '
+                                      'not available with javascript')
 
     def visit_TemplateData(self, node, fstate):
         # XXX: mark as safe. just how

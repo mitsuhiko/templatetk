@@ -331,6 +331,8 @@ class ASTTransformer(NodeVisitor):
         loop_fstate = fstate.derive()
         loop_fstate.analyze_identfiers([node.target])
         loop_fstate.add_special_identifier(self.config.forloop_accessor)
+        if self.config.forloop_parent_access:
+            fstate.add_implicit_lookup(self.config.forloop_accessor)
         loop_fstate.analyze_identfiers(node.body)
         # XXX: else_ in a separate fstate
 
