@@ -64,14 +64,15 @@ class FrameState(object):
             self.inner_frames.append(rv)
         return rv
 
-    def analyze_identfiers(self, nodes):
-        tracker = IdentTracker(self)
+    def analyze_identfiers(self, nodes, preassign=False):
+        tracker = IdentTracker(self, preassign)
         for node in nodes:
             tracker.visit(node)
             self.nodes.append(node)
 
-    def add_special_identifier(self, name):
-        self.analyze_identfiers([nodes.Name(name, 'param')])
+    def add_special_identifier(self, name, preassign=False):
+        self.analyze_identfiers([nodes.Name(name, 'param')],
+                                preassign=preassign)
 
     def add_implicit_lookup(self, name):
         self.analyze_identfiers([nodes.Name(name, 'load')])

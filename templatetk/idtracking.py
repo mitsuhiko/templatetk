@@ -14,9 +14,10 @@ from .nodeutils import NodeVisitor
 class IdentTracker(NodeVisitor):
     """A helper class that tracks the usage of identifiers."""
 
-    def __init__(self, frame):
+    def __init__(self, frame, preassign=False):
         NodeVisitor.__init__(self)
         self.frame = frame
+        self.preassign = preassign
 
     def visit_Block(self, node):
         # do not enter blocks.  It would not harm but cause some
@@ -38,7 +39,8 @@ class IdentTracker(NodeVisitor):
                 if node.ctx != 'load':
                     old = local_id
                     local_id = self.frame.ident_manager.override(node.name)
-                    self.frame.required_aliases[local_id] = old
+                    if not self.preassign:
+                        self.frame.required_aliases[local_id] = old
             break
 
         if local_id is None:
