@@ -330,10 +330,10 @@ class ASTTransformer(NodeVisitor):
         rv = []
         for child in node.nodes:
             if isinstance(child, nodes.TemplateData):
-                rv.append(self.write_output(child.data, fstate, lineno=child.lineno))
+                what = child.data
             else:
-                rv.append(self.write_output(self.visit(child, fstate), fstate,
-                                            lineno=child.lineno))
+                what = self.visit(child, fstate)
+            rv.append(self.write_output(what, fstate, lineno=child.lineno))
         return rv
 
     def visit_For(self, node, fstate):
