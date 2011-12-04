@@ -201,10 +201,10 @@
       return rv;
     },
 
-    finalize : function(value) {
+    toUnicode : function(value) {
       if (this.autoescape)
         value = rtlib.escape(value);
-      return rtlib.finalize(value);
+      return rtlib.toUnicode(value);
     },
 
     registerBlock : function(name, executor) {
@@ -282,7 +282,7 @@
       return escapeString(value);
     },
 
-    finalize : function(value) {
+    toUnicode : function(value) {
       return '' + value;
     },
 
