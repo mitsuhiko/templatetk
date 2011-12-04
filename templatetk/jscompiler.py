@@ -187,7 +187,7 @@ class JavaScriptGenerator(NodeVisitor):
         rv = []
         def walk(obj):
             if isinstance(obj, nodes.Name):
-                rv.append(fstate.lookup_name(node.name, node.ctx))
+                rv.append(fstate.lookup_name(obj.name, node.ctx))
                 return
             for child in obj.items:
                 walk(child)

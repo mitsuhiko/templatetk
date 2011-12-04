@@ -263,15 +263,13 @@
     },
 
     unpackTuple : function(obj, unpackInfo, loopContext) {
-      if (typeof obj.length !== 'undefined')
-        return [obj];
-      var rv = [loopContext];
+      var rv = [null];
       function unpack(obj, info) {
         for (var i = 0, n = info.length; i < n; i++)
-          if (typeof info[i] == 'array')
+          if (typeof info[i] !== 'string')
             unpack(obj[i], info[i]);
           else
-            rv.push(makeUndefined(obj[i], info[i]));
+            rv.push(rtlib.makeUndefined(obj[i], info[i]));
       }
       unpack(obj, unpackInfo);
       return rv;
