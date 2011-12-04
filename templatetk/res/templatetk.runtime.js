@@ -204,7 +204,7 @@
     finalize : function(value) {
       if (this.autoescape)
         value = rtlib.escape(value);
-      return rtlib.finalize('' + value);
+      return rtlib.finalize(value);
     },
 
     registerBlock : function(name, executor) {
@@ -283,7 +283,7 @@
     },
 
     finalize : function(value) {
-      return value;
+      return '' + value;
     },
 
     iterate : function(iterable, parent, unpackInfo, func) {
