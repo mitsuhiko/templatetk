@@ -292,8 +292,7 @@
       return '' + value;
     },
 
-    iterate : function(iterable, parent, unpackInfo, func) {
-      var index = 0;
+    iterate : function(iterable, parent, unpackInfo, func, elseFunc) {
       var seq = rtlib.sequenceFromIterable(iterable);
       var n = seq.length;
       var ctx = {
@@ -318,6 +317,8 @@
         ctx.index0++, ctx.index++;
         ctx.revindex--, ctx.revindex0--;
       }
+      if (ctx.index0 == 0 && elseFunc)
+        elseFunc();
     }
   };
 

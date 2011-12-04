@@ -239,6 +239,20 @@ class ForLoopTestCase(object):
             iterable=[1]
         ), '42', config=config)
 
+    def test_loop_else_body(self):
+        config = Config()
+
+        n = nodes
+        template = n.Template([
+            n.For(n.Name('item', 'store'), n.Name('iterable', 'load'), [
+                n.Output([n.Getattr(n.Name('loop', 'load'), n.Const('parent'))])
+            ], [n.Output([n.Const('ELSE')])])
+        ])
+
+        self.assert_result_matches(template, dict(
+            iterable=[]
+        ), 'ELSE', config=config)
+
     def test_silent_loop_unpacking(self):
         config = Config()
         config.allow_noniter_unpacking = True

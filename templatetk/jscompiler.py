@@ -266,30 +266,25 @@ class JavaScriptGenerator(NodeVisitor):
         if self.config.forloop_parent_access:
             fstate.add_implicit_lookup(self.config.forloop_accessor)
         loop_fstate.analyze_identfiers(node.body)
-        # XXX: else_ in a separate fstate
 
-        did_iterate = self.ident_manager.temporary()
+        loop_else_fstate = fstate.derive()
+        if node.else_:
+            loop_else_fstate.analyze_identfiers(node.else_)
 
-        if isinstance(node.target, nodes.Tuple):
-            if (fstate.config.allow_noniter_unpacking or
-                not fstate.config.strict_tuple_unpacking):
-                pass
-            raise NotImplementedError('Implement tuple unpacking')
+        self.writer.write_line('rt.iterate(')
+        self.visit(node.iter, loop_fstate)
+        nt = self.make_target_name_tuple(node.target)
+        self.writer.write(', ')
+        if self.config.forloop_parent_access:
+            self.visit(nodes.Name(self.config.forloop_accessor, 'load'), fstate)
         else:
-            self.writer.write_line('rt.iterate(')
-            self.visit(node.iter, loop_fstate)
-            nt = self.make_target_name_tuple(node.target)
-            self.writer.write(', ')
-            if self.config.forloop_parent_access:
-                self.visit(nodes.Name(self.config.forloop_accessor, 'load'), fstate)
-            else:
-                self.writer.write('null')
-            self.writer.write(', %s, function(%s, ' % (
-                self.writer.dump_object(nt),
-                loop_fstate.lookup_name(self.config.forloop_accessor, 'store')
-            ))
-            self.write_assignment(node.target, loop_fstate)
-            self.writer.write(') {')
+            self.writer.write('null')
+        self.writer.write(', %s, function(%s, ' % (
+            self.writer.dump_object(nt),
+            loop_fstate.lookup_name(self.config.forloop_accessor, 'store')
+        ))
+        self.write_assignment(node.target, loop_fstate)
+        self.writer.write(') {')
 
         self.writer.indent()
         buffer = self.writer.start_buffering()
@@ -298,7 +293,22 @@ class JavaScriptGenerator(NodeVisitor):
         self.write_scope_code(loop_fstate)
         self.writer.write_from_buffer(buffer)
         self.writer.outdent()
-        self.writer.write_line('});');
+        self.writer.write_line('}, ');
+
+        if node.else_:
+            self.writer.write('function() {')
+            self.writer.indent()
+            buffer = self.writer.start_buffering()
+            self.visit_block(node.else_, loop_else_fstate)
+            self.writer.end_buffering()
+            self.write_scope_code(loop_else_fstate)
+            self.writer.write_from_buffer(buffer)
+            self.writer.outdent()
+            self.writer.write('}')
+        else:
+            self.writer.write('null')
+
+        self.writer.write(');')
 
     def visit_If(self, node, fstate):
         self.writer.write_line('if (')

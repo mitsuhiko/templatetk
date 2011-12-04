@@ -335,11 +335,14 @@ class ASTTransformer(NodeVisitor):
         if self.config.forloop_parent_access:
             fstate.add_implicit_lookup(self.config.forloop_accessor)
         loop_fstate.analyze_identfiers(node.body)
-        # XXX: else_ in a separate fstate
 
-        did_iterate = self.ident_manager.temporary()
-        body = [ast.Assign([ast.Name(did_iterate, ast.Store())],
-                            ast.Name('True', ast.Load()))]
+        loop_else_fstate = fstate.derive()
+        if node.else_:
+            loop_else_fstate.analyze_identfiers(node.else_)
+
+        did_not_iterate = self.ident_manager.temporary()
+        body = [ast.Assign([ast.Name(did_not_iterate, ast.Store())],
+                            ast.Num(0))]
 
         if (fstate.config.allow_noniter_unpacking or
             not fstate.config.strict_tuple_unpacking) and \
@@ -369,10 +372,19 @@ class ASTTransformer(NodeVisitor):
 
         body.extend(self.visit_block(node.body, loop_fstate))
         self.inject_scope_code(loop_fstate, body)
-        return [ast.Assign([ast.Name(did_iterate, ast.Store())],
-                           ast.Name('False', ast.Load())),
+
+        rv = [ast.Assign([ast.Name(did_not_iterate, ast.Store())],
+                           ast.Num(1)),
                 ast.For(tuple_target, wrapped_iter, body, [],
                         lineno=node.lineno)]
+
+        if node.else_:
+            else_if = ast.If(ast.Name(did_not_iterate, ast.Load()), [], [])
+            else_if.body.extend(self.visit_block(node.else_, loop_else_fstate))
+            self.inject_scope_code(loop_fstate, else_if.body)
+            rv.append(else_if)
+
+        return rv
 
     def visit_Continue(self, node, fstate):
         return [ast.Continue(lineno=node.lineno)]

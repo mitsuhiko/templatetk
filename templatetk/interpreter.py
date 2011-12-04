@@ -257,7 +257,7 @@ class Interpreter(NodeVisitor):
                 break
         state.pop_frame()
 
-        if not iterated and node.else_ is not None:
+        if not iterated and node.else_:
             state.push_frame()
             for event in self.visit_block(node.else_, state):
                 yield event
