@@ -1,4 +1,4 @@
-(function() {
+(function(undefined) {
   var global = this;
   var _templatetk = global.templatetk;
 
@@ -61,7 +61,7 @@
   Context.prototype = {
     lookup : function(name) {
       var rv = this.vars[name];
-      if (this.parent && typeof rv === 'undefined')
+      if (this.parent && rv === undefined)
         return this.parent.lookup(name);
       return rtlib.makeUndefined(rv, name);
     }
@@ -150,7 +150,7 @@
     },
 
     evaluateBlock : function(name, context, level) {
-      if (typeof level === 'undefined')
+      if (level === undefined)
         level = -1;
       return this.info.evaluateBlock(name, level, context, this.writeFunc);
     },
@@ -251,7 +251,9 @@
     },
 
     sequenceFromIterable : function(iterable) {
-      if (typeof iterable.length !== 'undefined')
+      if (!iterable)
+        return [];
+      if (iterable.length !== undefined)
         return iterable;
       var rv = [];
       for (var obj in iterable)
@@ -277,7 +279,7 @@
     },
 
     escape : function(value) {
-      if (typeof value.toHTML !== 'undefined' &&
+      if (value.toHTML !== undefined &&
           Object.prototype.toString.call(value.toHTML) === '[object Function]')
         return value.toHTML();
       return escapeString(value);
