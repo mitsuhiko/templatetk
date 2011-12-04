@@ -1,7 +1,6 @@
 (function() {
   var global = this;
   var _templatetk = global.templatetk;
-  var undefinedSingleton = [][0];
 
   /* an aweful method to exploit the browser's support for escaping HTML */
   var _escapeMapping = {
@@ -226,8 +225,6 @@
     RuntimeInfo : RuntimeInfo,
 
     makeUndefined : function(value, name) {
-      if (typeof value === 'undefined')
-        return undefinedSingleton;
       return value;
     },
 
