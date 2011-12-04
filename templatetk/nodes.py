@@ -376,7 +376,7 @@ class Tuple(Literal):
     fields = ('items', 'ctx')
 
     def can_assign(self):
-        if self.ctx != 'store':
+        if self.ctx not in ('param', 'store'):
             return False
         for item in self.items:
             if not item.can_assign():

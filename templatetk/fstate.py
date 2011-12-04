@@ -89,6 +89,8 @@ class FrameState(object):
                 yield name, local_id
 
     def var_unassigned(self, name, reference_node):
+        if reference_node is None:
+            return True
         assigning_node = self.unassigned_until[name]
         # assigned on block start
         if assigning_node is None:

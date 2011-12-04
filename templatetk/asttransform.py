@@ -183,8 +183,10 @@ class ASTTransformer(NodeVisitor):
                              [ast.alias('*', None)], 0)
 
     def write_output(self, expr, fstate, lineno=None):
-        # XXX: autoescape!
-        expr = self.make_call('config.to_unicode', [expr])
+        if isinstance(expr, basestring):
+            expr = ast.Str(unicode(expr))
+        else:
+            expr = self.make_call('config.to_unicode', [expr])
         if fstate.buffer is None:
             expr = ast.Yield(expr)
         else:
@@ -325,8 +327,14 @@ class ASTTransformer(NodeVisitor):
         return fix_missing_locations(rv)
 
     def visit_Output(self, node, fstate):
-        return [self.write_output(self.visit(child, fstate), fstate,
-                                  lineno=child.lineno) for child in node.nodes]
+        rv = []
+        for child in node.nodes:
+            if isinstance(child, nodes.TemplateData):
+                rv.append(self.write_output(child.data, fstate, lineno=child.lineno))
+            else:
+                rv.append(self.write_output(self.visit(child, fstate), fstate,
+                                            lineno=child.lineno))
+        return rv
 
     def visit_For(self, node, fstate):
         loop_fstate = fstate.derive()
@@ -336,13 +344,14 @@ class ASTTransformer(NodeVisitor):
             fstate.add_implicit_lookup(self.config.forloop_accessor)
         loop_fstate.analyze_identfiers(node.body)
 
+        body = []
         loop_else_fstate = fstate.derive()
+
         if node.else_:
             loop_else_fstate.analyze_identfiers(node.else_)
-
-        did_not_iterate = self.ident_manager.temporary()
-        body = [ast.Assign([ast.Name(did_not_iterate, ast.Store())],
-                            ast.Num(0))]
+            did_not_iterate = self.ident_manager.temporary()
+            body.append(ast.Assign([ast.Name(did_not_iterate, ast.Store())],
+                                    ast.Num(0)))
 
         if (fstate.config.allow_noniter_unpacking or
             not fstate.config.strict_tuple_unpacking) and \
@@ -373,12 +382,12 @@ class ASTTransformer(NodeVisitor):
         body.extend(self.visit_block(node.body, loop_fstate))
         self.inject_scope_code(loop_fstate, body)
 
-        rv = [ast.Assign([ast.Name(did_not_iterate, ast.Store())],
-                           ast.Num(1)),
-                ast.For(tuple_target, wrapped_iter, body, [],
-                        lineno=node.lineno)]
+        rv = [ast.For(tuple_target, wrapped_iter, body, [],
+                      lineno=node.lineno)]
 
         if node.else_:
+            rv.insert(0, ast.Assign([ast.Name(did_not_iterate, ast.Store())],
+                                    ast.Num(1)))
             else_if = ast.If(ast.Name(did_not_iterate, ast.Load()), [], [])
             else_if.body.extend(self.visit_block(node.else_, loop_else_fstate))
             self.inject_scope_code(loop_fstate, else_if.body)
