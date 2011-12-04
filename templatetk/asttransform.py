@@ -183,6 +183,7 @@ class ASTTransformer(NodeVisitor):
                              [ast.alias('*', None)], 0)
 
     def write_output(self, expr, fstate, lineno=None):
+        # XXX: autoescape!
         expr = self.make_call('config.to_unicode', [expr])
         if fstate.buffer is None:
             expr = ast.Yield(expr)
@@ -531,7 +532,7 @@ class ASTTransformer(NodeVisitor):
         return self.make_const(node.value, fstate)
 
     def visit_TemplateData(self, node, fstate):
-        return self.make_call('config.markup_type', [ast.Str(node.data)],
+        return self.make_call('config.mark_safe', [ast.Str(node.data)],
                               lineno=node.lineno)
 
     def visit_Tuple(self, node, fstate):
@@ -563,13 +564,13 @@ class ASTTransformer(NodeVisitor):
         return ast.IfExp(test, true, false, lineno=node.lineno)
 
     def visit_MarkSafe(self, node, fstate):
-        return self.make_call('config.markup_type',
+        return self.make_call('config.mark_safe',
             [self.visit(node.expr, fstate)], lineno=node.lineno)
 
     def visit_MarkSafeIfAutoescape(self, node, fstate):
         value = self.visit(node.expr, fstate)
         return ast.IfExp(self.make_getattr('rtstate.info.autoescape'),
-                         self.make_call('config.markup_type', [value]),
+                         self.make_call('config.mark_safe', [value]),
                          value)
 
     def visit_Function(self, node, fstate):

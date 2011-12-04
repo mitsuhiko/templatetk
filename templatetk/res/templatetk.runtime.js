@@ -86,12 +86,16 @@
       return buffer.join("");
     },
 
-    renderToElements : function(context, selector) {
-      var container = document.createElement('div');
-      container.innerHTML = this.render(context);
+    _resolveSelector : function(container, selector) {
       if (selector != null)
         return jQuery(selector, container)[0].childNodes;
       return container.childNodes;
+    },
+
+    renderToElements : function(context, selector) {
+      var container = document.createElement('div');
+      container.innerHTML = this.render(context);
+      return this._resolveSelector(container, selector);
     },
 
     renderInto : function(context, targetSelector, selector) {
@@ -100,14 +104,16 @@
     },
 
     replaceRender : function(context, selectors) {
+      var container = document.createElement('div');
+      container.innerHTML = this.render(context);
       if (typeof selectors === 'string')
-        this._replaceRender(context, selectors);
+        this._replaceWithSelector(container, selectors);
       for (var i = 0, n = selectors.length; i < n; i++)
-        this._replaceRender(context, selectors[i]);
+        this._replaceWithSelector(container, selectors[i]);
     },
 
-    _replaceRender : function(context, selector) {
-      var elements = this.renderToElements(context, selector);
+    _replaceWithSelector : function(container, selector) {
+      var elements = this._resolveSelector(container, selector);
       jQuery(selector).empty().append(elements);
     },
 

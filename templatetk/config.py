@@ -39,6 +39,9 @@ class Config(object):
     def get_autoescape_default(self, template_name):
         return False
 
+    def mark_safe(self, value):
+        return self.markup_type(value)
+
     def getattr(self, obj, attribute):
         # XXX: better defaults maybe
         try:
