@@ -206,6 +206,19 @@ class JavaScriptGenerator(NodeVisitor):
             self.writer.write('%s: %s' % (self.writer.dump_object(name), local_id))
         self.writer.write('})')
 
+    def start_buffering(self, fstate):
+        self.writer.write_line('w = rts.startBuffering()')
+
+    def return_buffer_contents(self, fstate, write_to_var=False):
+        tmp = self.ident_manager.temporary()
+        self.writer.write_line('var %s = rts.endBuffering();' % tmp)
+        self.writer.write_line('w = %s[0];' % tmp)
+        if write_to_var:
+            self.writer.write_line('%s = %s[1];' % (tmp, tmp))
+            return tmp
+        else:
+            self.writer.write_line('return %s[1];' % tmp)
+
     def visit_block(self, nodes, fstate):
         self.writer.write_newline()
         try:
@@ -343,10 +356,7 @@ class JavaScriptGenerator(NodeVisitor):
 
     def visit_Output(self, node, fstate):
         for child in node.nodes:
-            if fstate.buffer:
-                self.writer.write_line('%s.push(' % fstate.buffer)
-            else:
-                self.writer.write_line('w(')
+            self.writer.write_line('w(')
             if isinstance(child, nodes.TemplateData):
                 self.writer.write_repr(child.data)
             else:
@@ -360,7 +370,7 @@ class JavaScriptGenerator(NodeVisitor):
         self.visit(node.template, fstate)
         self.writer.write(', ')
         self.write_context_as_object(fstate, node)
-        self.writer.write(');')
+        self.writer.write(', w);')
 
         if fstate.root:
             raise StopFrameCompilation()
@@ -371,15 +381,14 @@ class JavaScriptGenerator(NodeVisitor):
         self.writer.write(');')
 
     def visit_Function(self, node, fstate):
-        buffer_name = self.ident_manager.temporary()
         func_fstate = fstate.derive()
         func_fstate.analyze_identfiers(node.args)
         func_fstate.analyze_identfiers(node.body)
-        func_fstate.buffer = buffer_name
 
-        self.writer.write('rts.wrapFunction(')
+        argnames = [x.name for x in node.args]
+        self.writer.write('rt.wrapFunction(')
         self.visit(node.name, fstate)
-        self.writer.write(', %d, [' % len(node.args))
+        self.writer.write(', %s, [' % self.writer.dump_object(argnames))
 
         for idx, arg in enumerate(node.defaults or ()):
             if idx:
@@ -397,15 +406,13 @@ class JavaScriptGenerator(NodeVisitor):
         self.writer.write_newline()
         self.writer.indent()
 
-        self.writer.write('var %s = [];' % func_fstate.buffer)
         buffer = self.writer.start_buffering()
+        self.start_buffering(func_fstate)
         self.visit_block(node.body, func_fstate)
         self.writer.end_buffering()
         self.write_scope_code(func_fstate)
         self.writer.write_from_buffer(buffer)
-
-        self.writer.write_line('return rts.info.concatTemplateData(%s);' %
-            func_fstate.buffer)
+        self.return_buffer_contents(func_fstate)
 
         self.writer.outdent()
         self.writer.write_line('})')

@@ -133,7 +133,7 @@ class Function(object):
         pos_args = list(args[:self._arg_count])
         off = len(args)
         if off != self._arg_count:
-            for idx, name in enumerate(self._arguments[:len(pos_args)]):
+            for idx, name in enumerate(self._arguments[len(pos_args):]):
                 try:
                     value = kwargs.pop(name)
                 except KeyError:

@@ -16,6 +16,12 @@
     });
   }
 
+  function makeWriteFunc(buffer) {
+    if (buffer.push.bind)
+      return buffer.push.bind(buffer);
+    return function(x) { buffer.push(x); };
+  }
+
   function Config() {
     this.filters = {};
   };
@@ -66,9 +72,7 @@
     render : function(context) {
       context = new Context(context || {}, new Context(rtlib.getGlobals()));
       var buffer = [];
-      var rtstate = this.makeRuntimeState(context, function(chunk) {
-        buffer.push(chunk);
-      });
+      var rtstate = this.makeRuntimeState(context, makeWriteFunc(buffer));
       this.run(rtstate);
       return buffer.join("");
     },
@@ -124,6 +128,7 @@
     this.context = context;
     this.config = config;
     this.writeFunc = writeFunc;
+    this.buffers = [];
     if (!info)
       info = new rtlib.RuntimeInfo(this.config, templateName);
     this.info = info;
@@ -157,10 +162,25 @@
       return rv;
     },
 
-    extendTemplate : function(name, context) {
+    extendTemplate : function(name, context, writeFunc) {
       var template = this.getTemplate(name);
       var info = this.info.makeInfo(template, name, "extends");
-      return this.config.evaluateTemplate(template, context, this.writeFunc, info);
+      return this.config.evaluateTemplate(template, context, writeFunc, info);
+    },
+
+    startBuffering : function() {
+      var buffer = [];
+      this.buffers.push([this.writeFunc, buffer]);
+      return this.writeFunc = makeWriteFunc(buffer);
+    },
+
+    endBuffering : function() {
+      var entry = this.buffers.pop();
+      this.writeFunc = entry[0];
+      var rv = entry[1].join('');
+      if (this.autoescape)
+        rv = rtlib.markSafe(rv);
+      return [this.writeFunc, rv];
     }
   };
 
@@ -196,13 +216,6 @@
 
     finalize : function(value) {
       return rtlib.finalize(value, this.autoescape);
-    },
-
-    concatTemplateData : function(buffer) {
-      var rv = buffer.join('');
-      if (this.autoescape)
-        rv = rtlib.markSafe(rv);
-      return rv;
     },
 
     registerBlock : function(name, executor) {
@@ -311,8 +324,20 @@
         elseFunc();
     },
 
-    wrapFunction : function(name, argCount, defaults, func) {
-      return func;
+    wrapFunction : function(name, argNames, defaults, func) {
+      var argCount = argNames.length;
+      return function() {
+        var args = [];
+        for (var i = 0, n = Math.min(arguments.length, argCount); i < n; i++)
+          args.push(arguments[i]);
+        var off = args.length;
+        if (off != argCount)
+          for (var i = 0, n = argCount - off; i < n; i++) {
+            var didx = defaults.length + (i - argCount + off);
+            args.push(rtlib.makeUndefined(defaults[didx], argNames[off + i]));
+          }
+        return func.apply(null, args);
+      };
     }
   };
 
