@@ -267,6 +267,10 @@
       return value;
     },
 
+    concat : function(info, pieces) {
+      return ''.join(pieces);
+    },
+
     finalize : function(value, autoescape) {
       return '' + value;
     },

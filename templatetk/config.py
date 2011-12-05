@@ -60,8 +60,7 @@ class Config(object):
             return obj[attribute]
         return self.getattr(obj, attribute)
 
-    def concat(self, iterable):
-        # TODO: test and markup safety
+    def concat(self, info, iterable):
         return u''.join(imap(unicode, iterable))
 
     def finalize(self, obj, autoescape):

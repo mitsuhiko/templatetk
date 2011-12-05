@@ -467,11 +467,12 @@ class JavaScriptGenerator(NodeVisitor):
         return visitor
 
     def visit_Concat(self, node, fstate):
-        self.writer.write('(""')
-        for child in node.nodes:
-            self.writer.write(' + ')
+        self.writer.write('rt.concat(rts.info, [')
+        for idx, child in enumerate(node.nodes):
+            if idx:
+                self.writer.write(', ')
             self.visit(child, fstate)
-        self.writer.write(')')
+        self.writer.write('])')
 
     visit_Add = binexpr('+')
     visit_Sub = binexpr('-')
