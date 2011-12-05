@@ -240,9 +240,13 @@
         return [];
       if (iterable.length !== undefined)
         return iterable;
+      return this.sequenceFromObject(iterable);
+    },
+
+    sequenceFromObject : function(obj) {
       var rv = [];
-      for (var obj in iterable)
-        rv.push(obj);
+      for (var key in obj)
+        rv.push(key);
       return rv;
     },
 
