@@ -234,7 +234,7 @@ class Interpreter(NodeVisitor):
 
     def visit_Output(self, node, state):
         for node in node.nodes:
-            yield self.config.to_unicode(self.visit(node, state))
+            yield state.info.finalize(self.visit(node, state))
 
     def visit_For(self, node, state):
         parent = None

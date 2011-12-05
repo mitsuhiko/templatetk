@@ -334,7 +334,7 @@ class JavaScriptGenerator(NodeVisitor):
             buffer = self.writer.start_buffering()
             self.visit_block(node.else_, condition_fstate_else)
             self.writer.end_buffering()
-            self.inject_scope_code(condition_fstate)
+            self.write_scope_code(condition_fstate)
             self.writer.write_from_buffer(buffer)
             self.writer.outdent()
         else:
@@ -347,7 +347,7 @@ class JavaScriptGenerator(NodeVisitor):
             if isinstance(child, nodes.TemplateData):
                 self.writer.write_repr(child.data)
             else:
-                self.writer.write('rts.info.toUnicode(')
+                self.writer.write('rts.info.finalize(')
                 self.visit(child, fstate)
                 self.writer.write(')')
             self.writer.write(');')

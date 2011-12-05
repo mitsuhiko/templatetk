@@ -16,18 +16,6 @@
     });
   }
 
-  function Markup(value) {
-    this.value = value;
-  }
-  Markup.prototype = {
-    toString : function() {
-      return this.value;
-    },
-    toHTML : function() {
-      return this;
-    }
-  };
-
   function Config() {
     this.filters = {};
   };
@@ -206,10 +194,8 @@
       return rv;
     },
 
-    toUnicode : function(value) {
-      if (this.autoescape)
-        value = rtlib.escape(value);
-      return rtlib.toUnicode(value);
+    finalize : function(value) {
+      return rtlib.finalize(value, this.autoescape);
     },
 
     registerBlock : function(name, executor) {
@@ -219,7 +205,6 @@
   };
 
   var rtlib = {
-    Markup : Markup,
     Template : Template,
     RuntimeState : RuntimeState,
     RuntimeInfo : RuntimeInfo,
@@ -275,17 +260,10 @@
     },
 
     markSafe : function(value) {
-      return new Markup('' + value);
+      return value;
     },
 
-    escape : function(value) {
-      if (value.toHTML !== undefined &&
-          Object.prototype.toString.call(value.toHTML) === '[object Function]')
-        return value.toHTML();
-      return escapeString(value);
-    },
-
-    toUnicode : function(value) {
+    finalize : function(value, autoescape) {
       return '' + value;
     },
 
@@ -325,6 +303,9 @@
     globals : {},
     Config : Config,
     rt : rtlib,
+    utils : {
+      escape : escapeString
+    },
     noConflict : function() {
       global.templatetk = _templatetk;
       return lib;

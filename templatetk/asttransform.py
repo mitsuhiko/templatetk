@@ -186,7 +186,7 @@ class ASTTransformer(NodeVisitor):
         if isinstance(expr, basestring):
             expr = ast.Str(unicode(expr))
         else:
-            expr = self.make_call('config.to_unicode', [expr])
+            expr = self.make_call('rtstate.info.finalize', [expr])
         if fstate.buffer is None:
             expr = ast.Yield(expr)
         else:

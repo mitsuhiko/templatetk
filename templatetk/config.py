@@ -50,7 +50,7 @@ class Config(object):
             try:
                 return obj[attribute]
             except (TypeError, LookupError):
-                return Undefined()
+                 Undefined()
 
     def getitem(self, obj, attribute):
         if isinstance(attribute, slice):
@@ -64,7 +64,12 @@ class Config(object):
         # TODO: test and markup safety
         return u''.join(imap(unicode, iterable))
 
-    def to_unicode(self, obj):
+    def finalize(self, obj, autoescape):
+        if autoescape:
+            if hasattr(obj, '__html__'):
+                obj = obj.__html__()
+            else:
+                obj = self.markup_type.escape(unicode(obj))
         return unicode(obj)
 
     def is_undefined(self, obj):

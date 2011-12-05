@@ -112,6 +112,9 @@ class RuntimeInfo(object):
     def make_callout_context(self, lookup):
         return self.config.make_callout_context(self, lookup)
 
+    def finalize(self, value):
+        return self.config.finalize(value, self.autoescape)
+
 
 class Function(object):
     """Wraps a function.  Currently pretty much a noop but can be used
