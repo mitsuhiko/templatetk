@@ -198,6 +198,13 @@
       return rtlib.finalize(value, this.autoescape);
     },
 
+    concatTemplateData : function(buffer) {
+      var rv = buffer.join('');
+      if (this.autoescape)
+        rv = rtlib.markSafe(rv);
+      return rv;
+    },
+
     registerBlock : function(name, executor) {
       var m = this.blockExecutors;
       (m[name] = (m[name] || [])).push(executor);
@@ -302,6 +309,10 @@
       }
       if (ctx.index0 == 0 && elseFunc)
         elseFunc();
+    },
+
+    wrapFunction : function(name, argCount, defaults, func) {
+      return func;
     }
   };
 

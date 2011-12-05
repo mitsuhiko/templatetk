@@ -343,7 +343,10 @@ class JavaScriptGenerator(NodeVisitor):
 
     def visit_Output(self, node, fstate):
         for child in node.nodes:
-            self.writer.write_line('w(')
+            if fstate.buffer:
+                self.writer.write_line('%s.push(' % fstate.buffer)
+            else:
+                self.writer.write_line('w(')
             if isinstance(child, nodes.TemplateData):
                 self.writer.write_repr(child.data)
             else:
@@ -366,6 +369,46 @@ class JavaScriptGenerator(NodeVisitor):
         self.writer.write_line('rts.evaluateBlock("%s", ' % node.name)
         self.write_context_as_object(fstate, node)
         self.writer.write(');')
+
+    def visit_Function(self, node, fstate):
+        buffer_name = self.ident_manager.temporary()
+        func_fstate = fstate.derive()
+        func_fstate.analyze_identfiers(node.args)
+        func_fstate.analyze_identfiers(node.body)
+        func_fstate.buffer = buffer_name
+
+        self.writer.write('rts.wrapFunction(')
+        self.visit(node.name, fstate)
+        self.writer.write(', %d, [' % len(node.args))
+
+        for idx, arg in enumerate(node.defaults or ()):
+            if idx:
+                self.writer.write(', ')
+            self.visit(arg, func_fstate)
+
+        self.writer.write('], function(')
+
+        for idx, arg in enumerate(node.args):
+            if idx:
+                self.writer.write(', ')
+            self.visit(arg, func_fstate)
+
+        self.writer.write(') {')
+        self.writer.write_newline()
+        self.writer.indent()
+
+        self.writer.write('var %s = [];' % func_fstate.buffer)
+        buffer = self.writer.start_buffering()
+        self.visit_block(node.body, func_fstate)
+        self.writer.end_buffering()
+        self.write_scope_code(func_fstate)
+        self.writer.write_from_buffer(buffer)
+
+        self.writer.write_line('return rts.info.concatTemplateData(%s);' %
+            func_fstate.buffer)
+
+        self.writer.outdent()
+        self.writer.write_line('})')
 
     def visit_Assign(self, node, fstate):
         self.writer.write_newline()
