@@ -383,7 +383,12 @@ class JavaScriptGenerator(NodeVisitor):
         self.writer.write('[')
         self.visit(node.attr, fstate)
         self.writer.write(']')
-    visit_Getitem = visit_Getattr
+
+    def visit_Getitem(self, node, fstate):
+        self.visit(node.node, fstate)
+        self.writer.write('[')
+        self.visit(node.arg, fstate)
+        self.writer.write(']')
 
     def visit_Call(self, node, fstate):
         # XXX: For intercepting this it would be necessary to extract the
@@ -418,16 +423,16 @@ class JavaScriptGenerator(NodeVisitor):
         self.writer.write(']')
 
     def visit_Dict(self, node, fstate):
-        self.writer.write('[')
+        self.writer.write('({')
         for idx, pair in enumerate(node.items):
             if idx:
                 self.writer.write(', ')
             if not isinstance(pair.key, nodes.Const):
                 raise NotImplementedError('Constant dict key required with javascript')
             # hack to have the same logic as json.dumps for keys
-            self.writer.write(json.dumps({pair.key.value: 0})[1:-5] + ': ')
+            self.writer.write(json.dumps({pair.key.value: 0})[1:-4] + ': ')
             self.visit(pair.value, fstate)
-        self.writer.write(']')
+        self.writer.write('})')
 
     def visit_Filter(self, node, fstate):
         self.writer.write('rts.info.callFilter(')
