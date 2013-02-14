@@ -563,3 +563,8 @@ class JavaScriptGenerator(NodeVisitor):
         self.writer.write(' || ')
         self.visit(node.right, fstate)
         self.writer.write(')')
+
+    def visit_Not(self, node, fstate):
+        self.writer.write('!(')
+        self.visit(node.node, fstate)
+        self.writer.write(')')
