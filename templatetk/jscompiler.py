@@ -568,3 +568,25 @@ class JavaScriptGenerator(NodeVisitor):
         self.writer.write('!(')
         self.visit(node.node, fstate)
         self.writer.write(')')
+
+    def visit_Compare(self, node, fstate):
+        self.writer.write('(')
+        self.visit(node.expr, fstate)
+        assert len(node.ops) == 1, 'Comparison of two expressions is supported'
+        self.visit(node.ops[0], fstate)
+        self.writer.write(')')
+
+    def visit_Operand(self, node, fstate):
+        cmp_ops = {
+            'gt': '>',
+            'gteq': '>=',
+            'eq': '==',
+            'ne': '!=',
+            'lteq': '<=',
+            'lt': '<'
+        }
+
+        self.writer.write(' ')
+        self.writer.write(cmp_ops.get(node.op, ''))
+        self.writer.write(' ')
+        self.visit(node.expr, fstate)
